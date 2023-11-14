@@ -17,7 +17,7 @@ To run the application run the following command in terminal from this project r
 docker-compose up
 ```
 
-To run the django commands run the docker interactive command
+To run the django commands run the command below to access docker interactive
 
 ```sh
 docker exec -it backend-web-1 bash 
