@@ -40,7 +40,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "django_extensions",
-    "accounts"
+    "accounts",
 ]
 
 MIDDLEWARE = [
@@ -86,7 +86,6 @@ DATABASES = {
         "HOST": "db",
         "PORT": os.environ.get("DJANGO_DB_PORT", "5432"),
     },
-
     "default": {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": os.environ.get("DJANGO_DB_NAME", "default_db_name"),
@@ -94,7 +93,7 @@ DATABASES = {
         "PASSWORD": os.environ.get("DJANGO_DB_PASSWORD", "default_db_password"),
         "HOST": os.environ.get("DJANGO_DB_HOST", "localhost"),
         "PORT": os.environ.get("DJANGO_DB_PORT", "5432"),
-    }
+    },
 }
 
 
@@ -116,7 +115,18 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-AUTH_USER_MODEL = 'accounts.CustomUser'
+# Custom User settings
+AUTH_USER_MODEL = "accounts.CustomUser"
+
+# Email settings
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = ""
+EMAIL_PORT = ""
+EMAIL_HOST_USER = ""
+EMAIL_HOST_PASSWORD = ""
+EMAIL_USE_TLS = True
+EMAIL_USE_SSL = False
+
 
 # Authentication settings
 REST_FRAMEWORK = {
