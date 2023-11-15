@@ -62,31 +62,31 @@ class CustomerSerializer(serializers.ModelSerializer):
         customer = Customer.objects.create(user=user, **validated_data)
         return customer
 
-    # def create(self, validated_data):
-    #     # Generate a random verification token
-    #     token = secrets.token_urlsafe(32)
+    def create(self, validated_data):
+        # Generate a random verification token
+        token = secrets.token_urlsafe(32)
 
-    #     # Set the token expiration time (e.g., 1 minutes)
-    #     expiration_time = timezone.now() + timedelta(minutes=15)
+        # Set the token expiration time (e.g., 1 minutes)
+        expiration_time = timezone.now() + timedelta(minutes=15)
 
-    #     # Save the token and expiration time to the user instance
-    #     validated_data["verification_token"] = token
-    #     validated_data["verification_token_expires"] = expiration_time
+        # Save the token and expiration time to the user instance
+        validated_data["verification_token"] = token
+        validated_data["verification_token_expires"] = expiration_time
 
-    #     # Create the user instance
-    #     user = super(CustomerSerializer, self).create(validated_data)
+        # Create the user instance
+        user = super(CustomerSerializer, self).create(validated_data)
 
-    #     # Send the verification email
-    #     verification_url = reverse("verify-email") + f"?token={token}"
-    #     try:
-    #         send_mail(
-    #             "Verify Your Email",
-    #             f"Click the following link to verify your email: {verification_url}",
-    #             "from@example.com",
-    #             [user.email],
-    #             fail_silently=False,
-    #         )
-    #     except SMTPException:
-    #         raise serializers.ValidationError("Email could not be sent.")
+        # Send the verification email
+        verification_url = reverse("verify-email") + f"?token={token}"
+        try:
+            send_mail(
+                "Verify Your Email",
+                f"Click the following link to verify your email: {verification_url}",
+                "from@example.com",
+                [user.email],
+                fail_silently=False,
+            )
+        except SMTPException:
+            raise serializers.ValidationError("Email could not be sent.")
 
-    #     return user
+        return user
