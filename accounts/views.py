@@ -13,6 +13,7 @@ class RegisterCustomerView(APIView):
     """
     API view to handle user registration.
     """
+
     def post(self, request):
         """
         Handle POST requests. Validate the request data using the CustomerSerializer,
@@ -26,7 +27,10 @@ class RegisterCustomerView(APIView):
                 if user:
                     return Response(serializer.data, status=status.HTTP_201_CREATED)
             except DatabaseError:
-                return Response({"detail": "Database error."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                return Response(
+                    {"detail": "Database error."},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -34,6 +38,7 @@ class VerifyEmailView(APIView):
     """
     API view to handle email verification.
     """
+
     def get(self, request):
         """
         Handle GET requests. Validate the verification token, mark the user's email as
@@ -41,23 +46,21 @@ class VerifyEmailView(APIView):
         error message.
         """
         token = request.query_params.get("token", None)
+
         if token:
-            try:
-                customer = get_object_or_404(Customer, verification_token=token)
-            except Http404:
-                return Response(
-                    {"detail": "Invalid or expired verification link."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+            customer = self.get_customer_or_404(token)
 
             # Check if the token has expired
             if customer.verification_token_expires < timezone.now():
+                serializer = CustomerSerializer()
+                serializer.send_verification_email(customer)
+
                 return Response(
-                    {"detail": "Verification link has expired."},
-                    status=status.HTTP_400_BAD_REQUEST,
+                    {"detail": "A new verification link has been sent."},
+                    status=status.HTTP_200_OK,
                 )
 
-            # Mark the email as verified and remove the token
+            # Existing verification link handling
             customer.is_email_verified = True
             customer.verification_token = None
             customer.verification_token_expires = None
@@ -66,7 +69,17 @@ class VerifyEmailView(APIView):
             return Response(
                 {"detail": "Email successfully verified."}, status=status.HTTP_200_OK
             )
+
         return Response(
             {"detail": "Invalid or expired verification link."},
             status=status.HTTP_400_BAD_REQUEST,
         )
+
+    def get_customer_or_404(self, token):
+        try:
+            return get_object_or_404(Customer, verification_token=token)
+        except Http404:
+            raise Response(
+                {"detail": "Invalid or expired verification link."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )

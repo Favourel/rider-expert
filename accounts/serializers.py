@@ -4,7 +4,7 @@ from django.urls import reverse
 from django.core.mail import send_mail
 from rest_framework import serializers
 from smtplib import SMTPException
-from .models import CustomUser, Customer
+from .models import Customer
 import secrets
 
 
@@ -57,27 +57,19 @@ class CustomerSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data):
-        user_id = validated_data.pop("user_id")
-        user = CustomUser.objects.get(id=user_id)
-        customer = Customer.objects.create(user=user, **validated_data)
-        return customer
-
-    def create(self, validated_data):
-        # Generate a random verification token
-        token = secrets.token_urlsafe(32)
-
-        # Set the token expiration time (e.g., 1 minutes)
-        expiration_time = timezone.now() + timedelta(minutes=15)
-
-        # Save the token and expiration time to the user instance
-        validated_data["verification_token"] = token
-        validated_data["verification_token_expires"] = expiration_time
-
-        # Create the user instance
         user = super(CustomerSerializer, self).create(validated_data)
+        self.send_verification_email(user)
+        return user
 
-        # Send the verification email
+    def send_verification_email(self, user):
+        token = secrets.token_urlsafe(32)
+        expiration_time = timezone.now() + timedelta(minutes=15)
+        user.verification_token = token
+        user.verification_token_expires = expiration_time
+        user.save()
+
         verification_url = reverse("verify-email") + f"?token={token}"
+
         try:
             send_mail(
                 "Verify Your Email",
@@ -88,5 +80,3 @@ class CustomerSerializer(serializers.ModelSerializer):
             )
         except SMTPException:
             raise serializers.ValidationError("Email could not be sent.")
-
-        return user
