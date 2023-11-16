@@ -44,4 +44,4 @@ class UserVerification(models.Model):
 
 
 class Customer(models.Model):
-    user_id = models.OneToOneField(CustomUser, on_delete=models.CASCADE)
+    user_id = models.OneToOneField(CustomUser, on_delete=models.CASCADE, primary_key=True)
