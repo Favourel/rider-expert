@@ -8,6 +8,9 @@ from rest_framework.response import Response
 from rest_framework import status
 from .models import Customer
 from .serializers import CustomerSerializer
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class RegisterCustomerView(APIView):
@@ -15,12 +18,13 @@ class RegisterCustomerView(APIView):
     API view to handle user registration.
     """
 
-    def post(self, request):
+    def post(self, request, *args, **kwargs):
         """
         Handle POST requests. Validate the request data using the CustomerSerializer,
         create a new user if the data is valid, and return a response with the user data
         or validation errors.
         """
+        logger.debug(f"Request_data: {request.data}")
         serializer = CustomerSerializer(data=request.data)
         if serializer.is_valid():
             try:

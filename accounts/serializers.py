@@ -4,29 +4,15 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 class CustomUserSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = CustomUser
-        fields = "__all__"
-
-
-class CustomerSerializer(serializers.ModelSerializer):
-    """
-    Serializer for the Customer model. It includes custom validation for the password
-    and email fields, and a create method that generates a verification token, sends a
-    verification email, and creates a new user.
-    """
-
-    password = serializers.CharField(
-        write_only=True, required=True, style={"input_type": "password"}
-    )
     confirm_password = serializers.CharField(
         write_only=True, required=True, style={"input_type": "password"}
     )
 
     class Meta:
-        model = Customer
-        exclude = ["user_id"]
+        model = CustomUser
+        fields = "__all__"
 
     def validate_password(self, value):
         # Password must be at least 8 characters long
@@ -62,21 +48,29 @@ class CustomerSerializer(serializers.ModelSerializer):
 
     def validate(self, data):
         # Check if password and confirm_password match
-        if data.get("password") != data.get("confirm_password"):
+        if data.get("password") != data.pop("confirm_password"):
             raise serializers.ValidationError("Passwords do not match.")
         return data
 
+
+class CustomerSerializer(serializers.ModelSerializer):
+    """
+    Serializer for the Customer model. It includes custom validation for the password
+    and email fields, and a create method that generates a verification token, sends a
+    verification email, and creates a new user.
+    """
+
+    user_id = CustomUserSerializer()
+
+    class Meta:
+        model = Customer
+        fields = "__all__"
+
     def create(self, validated_data):
         logger.debug(f"Validated_data: {validated_data}")
-        user_data = {
-            "email": validated_data.get("email"),
-            "first_name": validated_data.get("first_name"),
-            "last_name": validated_data.get("last_name"),
-            "password": validated_data.get("password"),
-        }
-
-        if not user_data["email"]:
-            raise serializers.ValidationError("Email is not present, enter email")
-        user = CustomUser.objects.create_user(**user_data)
-        customer = Customer.objects.create(user)
+        user_data = validated_data.get("user_id")
+        user_serializer = CustomUserSerializer(data=user_data)
+        user_serializer.is_valid()
+        user = user_serializer.save()
+        customer = Customer.objects.create(user_id=user, **validated_data)
         return customer
