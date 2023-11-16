@@ -2,6 +2,7 @@ from django.http import Http404
 from django.db import DatabaseError
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
+from .utils import send_verification_email
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -25,7 +26,15 @@ class RegisterCustomerView(APIView):
             try:
                 user = serializer.save()
                 if user:
-                    return Response(serializer.data, status=status.HTTP_201_CREATED)
+                    # Automatically send verification email upon successful registration
+                    send_verification_email(user)
+                    return Response(
+                        {
+                            "data": serializer.data,
+                            "message": "Thank you for registering",
+                        },
+                        status=status.HTTP_201_CREATED,
+                    )
             except DatabaseError:
                 return Response(
                     {"detail": "Database error."},

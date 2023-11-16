@@ -1,11 +1,13 @@
-from datetime import timedelta
-from django.utils import timezone
-from django.urls import reverse
-from django.core.mail import send_mail
 from rest_framework import serializers
-from smtplib import SMTPException
-from .models import Customer
-import secrets
+from .models import Customer, CustomUser
+import logging
+
+logger = logging.getLogger(__name__)
+
+class CustomUserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomUser
+        fields = "__all__"
 
 
 class CustomerSerializer(serializers.ModelSerializer):
@@ -18,10 +20,13 @@ class CustomerSerializer(serializers.ModelSerializer):
     password = serializers.CharField(
         write_only=True, required=True, style={"input_type": "password"}
     )
+    confirm_password = serializers.CharField(
+        write_only=True, required=True, style={"input_type": "password"}
+    )
 
     class Meta:
         model = Customer
-        fields = "__all__"
+        exclude = ["user_id"]
 
     def validate_password(self, value):
         # Password must be at least 8 characters long
@@ -48,7 +53,6 @@ class CustomerSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 "Password must contain at least one number."
             )
-
         return value
 
     def validate_email(self, value):
@@ -56,27 +60,23 @@ class CustomerSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("This email is already in use.")
         return value
 
+    def validate(self, data):
+        # Check if password and confirm_password match
+        if data.get("password") != data.get("confirm_password"):
+            raise serializers.ValidationError("Passwords do not match.")
+        return data
+
     def create(self, validated_data):
-        user = super(CustomerSerializer, self).create(validated_data)
-        self.send_verification_email(user)
-        return user
+        logger.debug(f"Validated_data: {validated_data}")
+        user_data = {
+            "email": validated_data.get("email"),
+            "first_name": validated_data.get("first_name"),
+            "last_name": validated_data.get("last_name"),
+            "password": validated_data.get("password"),
+        }
 
-    def send_verification_email(self, user):
-        token = secrets.token_urlsafe(32)
-        expiration_time = timezone.now() + timedelta(minutes=15)
-        user.verification_token = token
-        user.verification_token_expires = expiration_time
-        user.save()
-
-        verification_url = reverse("verify-email") + f"?token={token}"
-
-        try:
-            send_mail(
-                "Verify Your Email",
-                f"Click the following link to verify your email: {verification_url}",
-                "from@example.com",
-                [user.email],
-                fail_silently=False,
-            )
-        except SMTPException:
-            raise serializers.ValidationError("Email could not be sent.")
+        if not user_data["email"]:
+            raise serializers.ValidationError("Email is not present, enter email")
+        user = CustomUser.objects.create_user(**user_data)
+        customer = Customer.objects.create(user)
+        return customer

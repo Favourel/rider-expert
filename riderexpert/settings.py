@@ -119,13 +119,12 @@ AUTH_PASSWORD_VALIDATORS = [
 AUTH_USER_MODEL = "accounts.CustomUser"
 
 # Email settings
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-EMAIL_HOST = ""
-EMAIL_PORT = ""
-EMAIL_HOST_USER = ""
-EMAIL_HOST_PASSWORD = ""
+EMAIL_HOST = 'sandbox.smtp.mailtrap.io'
+EMAIL_HOST_USER = 'a1b94a501906b4'
+EMAIL_HOST_PASSWORD = '8fcd935d4f88a6'
+EMAIL_PORT = '2525'
+DEFAULT_FROM_EMAIL = "info@emjay.dev"
 EMAIL_USE_TLS = True
-EMAIL_USE_SSL = False
 
 
 # Authentication settings
