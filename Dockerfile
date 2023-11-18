@@ -13,3 +13,6 @@ RUN rm requirements.txt
 RUN mkdir /app
 WORKDIR /app
 COPY . .
+
+RUN mkdir -p /app/logs && \
+    chmod -R 755 /app/logs

@@ -15,6 +15,7 @@ from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+LOG_FILE_PATH = os.path.join(BASE_DIR, "logs", "logfile.log")
 
 
 # Quick-start development settings - unsuitable for production
@@ -119,10 +120,10 @@ AUTH_PASSWORD_VALIDATORS = [
 AUTH_USER_MODEL = "accounts.CustomUser"
 
 # Email settings
-EMAIL_HOST = 'sandbox.smtp.mailtrap.io'
-EMAIL_HOST_USER = 'a1b94a501906b4'
-EMAIL_HOST_PASSWORD = '8fcd935d4f88a6'
-EMAIL_PORT = '2525'
+EMAIL_HOST = "sandbox.smtp.mailtrap.io"
+EMAIL_HOST_USER = "a1b94a501906b4"
+EMAIL_HOST_PASSWORD = "8fcd935d4f88a6"
+EMAIL_PORT = "2525"
 DEFAULT_FROM_EMAIL = "info@emjay.dev"
 EMAIL_USE_TLS = True
 
@@ -156,3 +157,36 @@ STATIC_URL = "static/"
 # https://docs.djangoproject.com/en/4.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "level": "INFO",  # Set the desired minimum log level for the console handler (INFO includes ERROR and WARNING)
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "INFO",  # Set the root logger level to INFO
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console"],
+            "level": "INFO",  # Set the Django logger level to INFO
+            "propagate": True,
+        },
+        "django.request": {
+            "handlers": ["console"],
+            "level": "INFO",  # Set the Django request logger level to INFO
+            "propagate": True,
+        },
+        "rest_framework": {
+            "handlers": ["console"],
+            "level": "INFO",  # Set the Django REST framework logger level to INFO
+            "propagate": True,
+        },
+    },
+}

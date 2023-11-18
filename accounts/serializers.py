@@ -5,14 +5,25 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class CustomUserSerializer(serializers.ModelSerializer):
-    confirm_password = serializers.CharField(
-        write_only=True, required=True, style={"input_type": "password"}
-    )
+class UserSerializer(serializers.ModelSerializer):
+    """
+    Serializer for the CustomUser model. It includes custom validation for the password
+    and email fields
+    """
+
+    password = serializers.CharField(write_only=True, required=True)
+    confirm_password = serializers.CharField(write_only=True, required=True)
 
     class Meta:
         model = CustomUser
-        fields = "__all__"
+        fields = [
+            "email",
+            "first_name",
+            "last_name",
+            "phone_number",
+            "password",
+            "confirm_password",
+        ]
 
     def validate_password(self, value):
         # Password must be at least 8 characters long
@@ -42,35 +53,54 @@ class CustomUserSerializer(serializers.ModelSerializer):
         return value
 
     def validate_email(self, value):
-        if Customer.objects.filter(email=value).exists():
+        if CustomUser.objects.filter(email=value).exists():
             raise serializers.ValidationError("This email is already in use.")
         return value
 
     def validate(self, data):
         # Check if password and confirm_password match
-        if data.get("password") != data.pop("confirm_password"):
+        password = data.get("password")
+        confirm_password = data.get("confirm_password")
+        logger.debug({password, confirm_password})
+        if password != confirm_password:
             raise serializers.ValidationError("Passwords do not match.")
         return data
 
+    def create(self, validated_data):
+        # Remove 'confirm_password' from the data before creating the user
+        validated_data.pop("confirm_password", None)
+
+        # Retrieve password directly from validated_data
+        password = validated_data.get("password")
+
+        # Ensure that password is not None before validating its length
+        if password is None:
+            raise serializers.ValidationError("Password cannot be empty.")
+
+        self.validate_password(password)
+
+        # Create the user without 'confirm_password'
+        user = CustomUser.objects.create_user(**validated_data)
+
+        # Set the password for the user
+        user.set_password(password)
+        user.save()
+
+        return user
+
 
 class CustomerSerializer(serializers.ModelSerializer):
-    """
-    Serializer for the Customer model. It includes custom validation for the password
-    and email fields, and a create method that generates a verification token, sends a
-    verification email, and creates a new user.
-    """
-
-    user_id = CustomUserSerializer()
+    user_details = serializers.SerializerMethodField()
 
     class Meta:
         model = Customer
-        fields = "__all__"
+        fields = ["user_details"]
 
-    def create(self, validated_data):
-        logger.debug(f"Validated_data: {validated_data}")
-        user_data = validated_data.get("user_id")
-        user_serializer = CustomUserSerializer(data=user_data)
-        user_serializer.is_valid()
-        user = user_serializer.save()
-        customer = Customer.objects.create(user_id=user, **validated_data)
-        return customer
+    def get_user_details(self, obj):
+        user = obj.user
+        return {
+            "email": user.email,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "phone_number": user.phone_number,
+        }
