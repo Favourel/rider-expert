@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.serializers import ValidationError
 from .serializers import CustomerSerializer, UserSerializer
-from .models import UserVerification
+from .models import UserVerification, Customer
 from .utils import send_verification_email
 import logging
 
@@ -37,17 +37,16 @@ class RegisterCustomerView(APIView):
                 try:
                     with transaction.atomic():
                         user = user_serializer.save()
-                        customer_data = {"user_id": user.id}
-                        customer_serializer = CustomerSerializer(data=customer_data)
+                        customer_obj = Customer.objects.create(user=user)
+                        customer_serializer = CustomerSerializer(customer_obj).data
 
-                        if customer_serializer.is_valid():
-                            customer_serializer.save()
+                        if customer_serializer:
                             # Automatically send verification email upon successful registration
                             send_verification_email(user)
                             return Response(
                                 {
-                                    "data": customer_serializer.data,
-                                    "message": "Thank you for registering",
+                                    "data": customer_serializer,
+                                    "message": "Thank you for registering, check your email to verify your account",
                                 },
                                 status=status.HTTP_201_CREATED,
                             )

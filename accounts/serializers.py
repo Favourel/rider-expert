@@ -88,19 +88,12 @@ class UserSerializer(serializers.ModelSerializer):
 
         return user
 
-
+class CustomUserNestedSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomUser
+        fields = ('email', 'first_name', 'last_name', 'phone_number',)
 class CustomerSerializer(serializers.ModelSerializer):
-    user_details = serializers.SerializerMethodField()
-
+    user = CustomUserNestedSerializer(read_only=True)
     class Meta:
         model = Customer
-        fields = ["user_details"]
-
-    def get_user_details(self, obj):
-        user = obj.user
-        return {
-            "email": user.email,
-            "first_name": user.first_name,
-            "last_name": user.last_name,
-            "phone_number": user.phone_number,
-        }
+        fields = ('user',)
