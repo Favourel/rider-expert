@@ -32,7 +32,7 @@ class RiderRegistrationView(APIView):
                 try:
                     with transaction.atomic():
                         user = user_serializer.save()
-                        
+
                         rider_obj = Rider.objects.create(user=user)
                         rider_serializer = RiderSerializer(rider_obj).data
 
@@ -67,6 +67,7 @@ class RiderRegistrationView(APIView):
                     )
         else:
             raise ValidationError(detail=user_serializer.errors)
+
 
 class RegisterCustomerView(APIView):
     """
@@ -124,7 +125,6 @@ class RegisterCustomerView(APIView):
                     )
         else:
             raise ValidationError(detail=user_serializer.errors)
-
 
 
 class VerifyEmailView(APIView):
@@ -214,4 +214,3 @@ class ResendTokenView(APIView):
         return Response(
             {"detail": "New OTP has been sent to your email"}, status=status.HTTP_200_OK
         )
-
