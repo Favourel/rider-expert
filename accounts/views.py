@@ -66,7 +66,7 @@ class RiderRegistrationView(APIView):
                         status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     )
         else:
-            raise ValidationError(detail=user_serializer.errors
+            raise ValidationError(detail=user_serializer.errors)
 
 class RegisterCustomerView(APIView):
     """
