@@ -6,10 +6,8 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework import status
 from rest_framework.serializers import ValidationError
-from .serializers import CustomerSerializer, UserSerializer, RiderSerializer
-from .models import UserVerification, Customer, CustomUser, Rider
-from .serializers import CustomerSerializer, UserSerializer
-from .models import UserVerification, Customer, CustomUser
+from .serializers import *
+from .models import *
 from .utils import send_verification_email
 
 import logging
