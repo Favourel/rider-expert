@@ -1,6 +1,5 @@
 from rest_framework import serializers
 from .models import Customer, CustomUser, Rider
-
 import logging
 
 logger = logging.getLogger(__name__)
@@ -89,23 +88,20 @@ class UserSerializer(serializers.ModelSerializer):
 
         return user
 
-
 class CustomUserNestedSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
         fields = ('email', 'first_name', 'last_name', 'phone_number',)
-
-
-class RiderSerializer(serializers.ModelSerializer):
-    user = CustomUserNestedSerializer(read_only=True)
-
-    class Meta:
-        model = Rider
-        fields = ('user',)
-
 
 class CustomerSerializer(serializers.ModelSerializer):
     user = CustomUserNestedSerializer(read_only=True)
     class Meta:
         model = Customer
         fields = ('user',)
+
+class RiderSerializer(serializers.ModelSerializer):
+    user = CustomUserNestedSerializer(read_only=True)
+
+    class Meta:
+        model = Rider
+        fields = ('user','is_available')
