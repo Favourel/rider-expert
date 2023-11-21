@@ -105,7 +105,7 @@ class CustomerSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Customer
-        fields = ("user",)
+        fields = ["user"]
 
 
 class RiderSerializer(serializers.ModelSerializer):
