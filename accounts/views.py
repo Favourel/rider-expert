@@ -6,8 +6,8 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework import status
 from rest_framework.serializers import ValidationError
-from .serializers import CustomerSerializer, UserSerializer
-from .models import UserVerification, Customer
+from .serializers import CustomerSerializer, UserSerializer, RiderSerializer
+from .models import UserVerification, Customer, CustomUser, Rider
 from .utils import send_verification_email
 
 import logging
@@ -37,10 +37,8 @@ class RiderRegistrationView(APIView):
                         rider_serializer = RiderSerializer(rider_obj).data
 
                         if rider_serializer:
-                            # rider = rider_serializer.save()
-
                             # Send welcome email or perform any additional actions
-                            # send_welcome_email(user)
+                            send_verification_email(user)
 
                             return Response(
                                 {
