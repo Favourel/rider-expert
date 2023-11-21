@@ -3,11 +3,11 @@ from django.db import transaction, IntegrityError
 from django.utils import timezone
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework import status
 from rest_framework.serializers import ValidationError
-
-from .serializers import CustomerSerializer, UserSerializer, RiderSerializer
-from .models import UserVerification, Customer, Rider
+from .serializers import CustomerSerializer, UserSerializer
+from .models import UserVerification, Customer
 from .utils import send_verification_email
 
 import logging
@@ -77,7 +77,7 @@ class RegisterCustomerView(APIView):
     @transaction.atomic
     def post(self, request, *args, **kwargs):
         """
-        Handle POST requests. Validate the request data using the CustomerSerializer,
+        Handle POST requests. Validate the request data using the UserSerializer,
         create a new user if the data is valid, and return a response with the user data
         or validation errors.
         """
@@ -134,7 +134,7 @@ class VerifyEmailView(APIView):
 
     def post(self, request, *args, **kwargs):
         """
-        Handle GET requests. Validate the verification token, mark the user's email as
+        Handle POST requests. Validate the verification token, mark the user's email as
         verified if the token is valid, and return a response with a success message or
         error message.
         """
@@ -213,4 +213,43 @@ class ResendTokenView(APIView):
 
         return Response(
             {"detail": "New OTP has been sent to your email"}, status=status.HTTP_200_OK
+        )
+
+
+class LoginView(APIView):
+    def post(self, request, *args, **kwargs):
+        email = request.data.get("email")
+        password = request.data.get("password")
+
+        if not email or not password:
+            return Response(
+                {"detail": "Email and password are required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            user = CustomUser.objects.get(email=email)
+        except CustomUser.DoesNotExist:
+            return Response(
+                {"detail": "Invalid email or password"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not user.is_verified:
+            return Response(
+                {"detail": "Please verify your email before logging in"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not user.check_password(password):
+            return Response(
+                {"detail": "Invalid email or password"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        access_token = str(RefreshToken.for_user(user).access_token)
+        return Response(
+            {
+                "access": access_token,
+            },
+            status=status.HTTP_200_OK,
         )
