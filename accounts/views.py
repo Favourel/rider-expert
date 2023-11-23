@@ -21,27 +21,34 @@ class BaseUserRegistrationView(APIView):
 
     @transaction.atomic
     def post(self, request, *args, **kwargs):
+        # Log the request data
         logger.debug(f"Request_data: {request.data}")
+
+        # Extract the user data from the request
         user_data = request.data
 
-        # Validate UserSerializer first
+        # Validate the user data using the UserSerializer
         user_serializer = UserSerializer(data=user_data)
 
         if user_serializer.is_valid():
-            # Access validated data after validation
+            # Access the validated data after validation
             user_data = user_serializer.validated_data
 
             if user_data:
                 try:
                     with transaction.atomic():
+                        # Save the user and create a user object
                         user = user_serializer.save()
                         user_obj = self.user_model.objects.create(user=user)
+
+                        # Serialize the user object
                         user_obj_serializer = self.serializer_class(user_obj).data
 
                         if user_obj_serializer:
-                            # Send welcome email or perform any additional actions
+                            # Send a welcome email or perform any additional actions
                             send_verification_email(user)
 
+                            # Return a response with the serialized user object and a success message
                             return Response(
                                 {
                                     "data": user_obj_serializer,
@@ -50,8 +57,10 @@ class BaseUserRegistrationView(APIView):
                                 status=status.HTTP_201_CREATED,
                             )
                         else:
+                            # Raise a validation error if the user object serialization fails
                             raise ValidationError(detail=user_obj_serializer.errors)
                 except IntegrityError as e:
+                    # Handle integrity errors
                     logger.error(f"Integrity error: {e}")
                     return Response(
                         {
@@ -60,12 +69,14 @@ class BaseUserRegistrationView(APIView):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
                 except Exception as e:
+                    # Handle unexpected errors
                     logger.error(f"An unexpected error occurred: {e}")
                     return Response(
                         {"detail": "An unexpected error occurred."},
                         status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     )
         else:
+            # Raise a validation error if the user serializer is not valid
             raise ValidationError(detail=user_serializer.errors)
 
 
@@ -86,18 +97,21 @@ class VerifyEmailView(APIView):
 
     def post(self, request, *args, **kwargs):
         """
-        Handle POST requests. Validate the verification token, mark the user's email as
-        verified if the token is valid, and return a response with a success message or
-        error message.
+        Handle POST requests to validate the verification token, mark the user's email as verified,
+        and return a response with a success message or error message.
         """
+
+        # Get the otp_token from the request data
         otp_token = request.data.get("otp_token")
 
+        # Check if otp_token is missing
         if not otp_token:
             return Response(
                 {"detail": "OTP token is required"}, status=status.HTTP_400_BAD_REQUEST
             )
 
         try:
+            # Query the UserVerification model for the given otp_token
             user_verification = UserVerification.objects.filter(
                 email_otp__exact=otp_token
             ).first()
@@ -105,6 +119,8 @@ class VerifyEmailView(APIView):
             return Response(
                 {"detail": "Invalid OTP token"}, status=status.HTTP_400_BAD_REQUEST
             )
+
+        # Check if user_verification exists and the email has not expired
         if user_verification and (
             user_verification.email_expiration_time > timezone.now()
             and not user_verification.user.is_verified
@@ -170,29 +186,50 @@ class ResendTokenView(APIView):
 
 class LoginView(APIView):
     def post(self, request, *args, **kwargs):
+        """
+        Handle POST requests to the API endpoint.
+
+        Args:
+            request: The request object containing the data.
+            *args: Additional positional arguments.
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            A response object with the appropriate tokens and status code.
+        """
+        # Get the email and password from the request data
         email = request.data.get("email")
         password = request.data.get("password")
 
-        if email is None or password is None:
-            return Response(
-                {"detail": "Email and password are required."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        # Check if email or password is missing
+        if not email or not password:
+            return self.invalid_credentials_response()
 
+        # Authenticate the user with the provided email and password
         user = authenticate(request, email=email, password=password)
 
+        # Check if user is None (invalid credentials)
         if user is None:
-            return Response(
-                {"detail": "Invalid email or password."},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
+            return self.invalid_credentials_response()
 
-        # Check if the user's email is verified
+        # Check if user's email is not verified
         if not user.is_verified:
-            return Response(
-                {"detail": "Email is not verified."},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
+            return self.unverified_email_response()
 
+        # Create JWT tokens for the authenticated user
         tokens = create_jwt_pair_for_user(user)
+
+        # Return the tokens with a 200 OK status code
         return Response(tokens, status=status.HTTP_200_OK)
+
+    def invalid_credentials_response(self):
+        return Response(
+            {"detail": "Invalid email or password."},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    def unverified_email_response(self):
+        return Response(
+            {"detail": "Email is not verified."},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
