@@ -1,9 +1,9 @@
 from django.db import transaction, IntegrityError
-
+from django.contrib.auth import authenticate
 from django.utils import timezone
+from .tokens import create_jwt_pair_for_user
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework import status
 from rest_framework.serializers import ValidationError
 from .serializers import *
@@ -15,7 +15,10 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class RiderRegistrationView(APIView):
+class BaseUserRegistrationView(APIView):
+    user_model = None
+    serializer_class = None
+
     @transaction.atomic
     def post(self, request, *args, **kwargs):
         logger.debug(f"Request_data: {request.data}")
@@ -32,23 +35,22 @@ class RiderRegistrationView(APIView):
                 try:
                     with transaction.atomic():
                         user = user_serializer.save()
+                        user_obj = self.user_model.objects.create(user=user)
+                        user_obj_serializer = self.serializer_class(user_obj).data
 
-                        rider_obj = Rider.objects.create(user=user)
-                        rider_serializer = RiderSerializer(rider_obj).data
-
-                        if rider_serializer:
+                        if user_obj_serializer:
                             # Send welcome email or perform any additional actions
                             send_verification_email(user)
 
                             return Response(
                                 {
-                                    "data": rider_serializer,
-                                    "message": "Rider registration successful",
+                                    "data": user_obj_serializer,
+                                    "message": f"{self.user_model.__name__} registration successful",
                                 },
                                 status=status.HTTP_201_CREATED,
                             )
                         else:
-                            raise ValidationError(detail=rider_serializer.errors)
+                            raise ValidationError(detail=user_obj_serializer.errors)
                 except IntegrityError as e:
                     logger.error(f"Integrity error: {e}")
                     return Response(
@@ -67,62 +69,14 @@ class RiderRegistrationView(APIView):
             raise ValidationError(detail=user_serializer.errors)
 
 
-class RegisterCustomerView(APIView):
-    """
-    API view to handle user registration.
-    """
+class RiderRegistrationView(BaseUserRegistrationView):
+    user_model = Rider
+    serializer_class = RiderSerializer
 
-    @transaction.atomic
-    def post(self, request, *args, **kwargs):
-        """
-        Handle POST requests. Validate the request data using the UserSerializer,
-        create a new user if the data is valid, and return a response with the user data
-        or validation errors.
-        """
-        logger.debug(f"Request_data: {request.data}")
-        user_data = request.data
 
-        # Validate UserSerializer first
-        user_serializer = UserSerializer(data=user_data)
-        if user_serializer.is_valid():
-            # Access validated data after validation
-            user_data = user_serializer.validated_data
-
-            if user_data:
-                try:
-                    with transaction.atomic():
-                        user = user_serializer.save()
-                        customer_obj = Customer.objects.create(user=user)
-                        customer_serializer = CustomerSerializer(customer_obj).data
-
-                        if customer_serializer:
-                            # Automatically send verification email upon successful registration
-                            send_verification_email(user)
-                            return Response(
-                                {
-                                    "data": customer_serializer,
-                                    "message": "Thank you for registering, check your email to verify your account",
-                                },
-                                status=status.HTTP_201_CREATED,
-                            )
-                        else:
-                            raise ValidationError(detail=customer_serializer.errors)
-                except IntegrityError as e:
-                    logger.error(f"Integrity error: {e}")
-                    return Response(
-                        {
-                            "detail": "Integrity error. Please ensure the data is unique."
-                        },
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-                except Exception as e:
-                    logger.error(f"An unexpected error occurred: {e}")
-                    return Response(
-                        {"detail": "An unexpected error occurred."},
-                        status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    )
-        else:
-            raise ValidationError(detail=user_serializer.errors)
+class CustomerRegistrationView(BaseUserRegistrationView):
+    user_model = Customer
+    serializer_class = CustomerSerializer
 
 
 class VerifyEmailView(APIView):
@@ -219,35 +173,26 @@ class LoginView(APIView):
         email = request.data.get("email")
         password = request.data.get("password")
 
-        if not email or not password:
+        if email is None or password is None:
             return Response(
-                {"detail": "Email and password are required"},
+                {"detail": "Email and password are required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        try:
-            user = CustomUser.objects.get(email=email)
-        except CustomUser.DoesNotExist:
+        user = authenticate(request, email=email, password=password)
+
+        if user is None:
             return Response(
-                {"detail": "Invalid email or password"},
-                status=status.HTTP_400_BAD_REQUEST,
+                {"detail": "Invalid email or password."},
+                status=status.HTTP_401_UNAUTHORIZED,
             )
 
+        # Check if the user's email is verified
         if not user.is_verified:
             return Response(
-                {"detail": "Please verify your email before logging in"},
-                status=status.HTTP_400_BAD_REQUEST,
+                {"detail": "Email is not verified."},
+                status=status.HTTP_401_UNAUTHORIZED,
             )
 
-        if not user.check_password(password):
-            return Response(
-                {"detail": "Invalid email or password"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        access_token = str(RefreshToken.for_user(user).access_token)
-        return Response(
-            {
-                "access": access_token,
-            },
-            status=status.HTTP_200_OK,
-        )
+        tokens = create_jwt_pair_for_user(user)
+        return Response(tokens, status=status.HTTP_200_OK)

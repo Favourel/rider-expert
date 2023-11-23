@@ -12,7 +12,7 @@ urlpatterns = [
     path("token/verify", TokenVerifyView.as_view(), name="token_verify"),
     path(
         "register_customer/",
-        views.RegisterCustomerView.as_view(),
+        views.CustomerRegistrationView.as_view(),
         name="register_customer",
     ),
     path(
@@ -21,4 +21,5 @@ urlpatterns = [
         name="rider-registration",
     ),
     path("verify-email/", views.VerifyEmailView.as_view(), name="verify-email"),
+    path("login/", views.LoginView.as_view(), name="login"),
 ]
