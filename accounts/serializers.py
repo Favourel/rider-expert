@@ -88,20 +88,29 @@ class UserSerializer(serializers.ModelSerializer):
 
         return user
 
+
 class CustomUserNestedSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
-        fields = ('email', 'first_name', 'last_name', 'phone_number',)
+        fields = (
+            "email",
+            "first_name",
+            "last_name",
+            "phone_number",
+        )
+
 
 class CustomerSerializer(serializers.ModelSerializer):
     user = CustomUserNestedSerializer(read_only=True)
+
     class Meta:
         model = Customer
-        fields = ('user',)
+        fields = ["user"]
+
 
 class RiderSerializer(serializers.ModelSerializer):
     user = CustomUserNestedSerializer(read_only=True)
 
     class Meta:
         model = Rider
-        fields = ('user','is_available')
+        fields = ("user", "is_available")

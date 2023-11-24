@@ -1,13 +1,13 @@
 from django.db import transaction, IntegrityError
-
+from django.contrib.auth import authenticate
 from django.utils import timezone
+from .tokens import create_jwt_pair_for_user
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.serializers import ValidationError
-
-from .serializers import CustomerSerializer, UserSerializer, RiderSerializer
-from .models import UserVerification, Customer, Rider
+from .serializers import *
+from .models import *
 from .utils import send_verification_email
 
 import logging
@@ -15,100 +15,52 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class RiderRegistrationView(APIView):
+class BaseUserRegistrationView(APIView):
+    user_model = None
+    serializer_class = None
+
     @transaction.atomic
     def post(self, request, *args, **kwargs):
+        # Log the request data
         logger.debug(f"Request_data: {request.data}")
+
+        # Extract the user data from the request
         user_data = request.data
 
-        # Validate UserSerializer first
+        # Validate the user data using the UserSerializer
         user_serializer = UserSerializer(data=user_data)
 
         if user_serializer.is_valid():
-            # Access validated data after validation
+            # Access the validated data after validation
             user_data = user_serializer.validated_data
 
             if user_data:
                 try:
                     with transaction.atomic():
+                        # Save the user and create a user object
                         user = user_serializer.save()
-                        
-                        rider_obj = Rider.objects.create(user=user)
-                        rider_serializer = RiderSerializer(rider_obj).data
+                        user_obj = self.user_model.objects.create(user=user)
 
-                        if rider_serializer:
-                            # rider = rider_serializer.save()
+                        # Serialize the user object
+                        user_obj_serializer = self.serializer_class(user_obj).data
 
-                            # Send welcome email or perform any additional actions
-                            # send_welcome_email(user)
-
-                            return Response(
-                                {
-                                    "data": rider_serializer,
-                                    "message": "Rider registration successful",
-                                },
-                                status=status.HTTP_201_CREATED,
-                            )
-                        else:
-                            raise ValidationError(detail=rider_serializer.errors)
-                except IntegrityError as e:
-                    logger.error(f"Integrity error: {e}")
-                    return Response(
-                        {
-                            "detail": "Integrity error. Please ensure the data is unique."
-                        },
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-                except Exception as e:
-                    logger.error(f"An unexpected error occurred: {e}")
-                    return Response(
-                        {"detail": "An unexpected error occurred."},
-                        status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    )
-        else:
-            raise ValidationError(detail=user_serializer.errors)
-
-class RegisterCustomerView(APIView):
-    """
-    API view to handle user registration.
-    """
-
-    @transaction.atomic
-    def post(self, request, *args, **kwargs):
-        """
-        Handle POST requests. Validate the request data using the CustomerSerializer,
-        create a new user if the data is valid, and return a response with the user data
-        or validation errors.
-        """
-        logger.debug(f"Request_data: {request.data}")
-        user_data = request.data
-
-        # Validate UserSerializer first
-        user_serializer = UserSerializer(data=user_data)
-        if user_serializer.is_valid():
-            # Access validated data after validation
-            user_data = user_serializer.validated_data
-
-            if user_data:
-                try:
-                    with transaction.atomic():
-                        user = user_serializer.save()
-                        customer_obj = Customer.objects.create(user=user)
-                        customer_serializer = CustomerSerializer(customer_obj).data
-
-                        if customer_serializer:
-                            # Automatically send verification email upon successful registration
+                        if user_obj_serializer:
+                            # Send a welcome email or perform any additional actions
                             send_verification_email(user)
+
+                            # Return a response with the serialized user object and a success message
                             return Response(
                                 {
-                                    "data": customer_serializer,
-                                    "message": "Thank you for registering, check your email to verify your account",
+                                    "data": user_obj_serializer,
+                                    "message": f"{self.user_model.__name__} registration successful",
                                 },
                                 status=status.HTTP_201_CREATED,
                             )
                         else:
-                            raise ValidationError(detail=customer_serializer.errors)
+                            # Raise a validation error if the user object serialization fails
+                            raise ValidationError(detail=user_obj_serializer.errors)
                 except IntegrityError as e:
+                    # Handle integrity errors
                     logger.error(f"Integrity error: {e}")
                     return Response(
                         {
@@ -117,14 +69,25 @@ class RegisterCustomerView(APIView):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
                 except Exception as e:
+                    # Handle unexpected errors
                     logger.error(f"An unexpected error occurred: {e}")
                     return Response(
                         {"detail": "An unexpected error occurred."},
                         status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     )
         else:
+            # Raise a validation error if the user serializer is not valid
             raise ValidationError(detail=user_serializer.errors)
 
+
+class RiderRegistrationView(BaseUserRegistrationView):
+    user_model = Rider
+    serializer_class = RiderSerializer
+
+
+class CustomerRegistrationView(BaseUserRegistrationView):
+    user_model = Customer
+    serializer_class = CustomerSerializer
 
 
 class VerifyEmailView(APIView):
@@ -134,18 +97,21 @@ class VerifyEmailView(APIView):
 
     def post(self, request, *args, **kwargs):
         """
-        Handle GET requests. Validate the verification token, mark the user's email as
-        verified if the token is valid, and return a response with a success message or
-        error message.
+        Handle POST requests to validate the verification token, mark the user's email as verified,
+        and return a response with a success message or error message.
         """
+
+        # Get the otp_token from the request data
         otp_token = request.data.get("otp_token")
 
+        # Check if otp_token is missing
         if not otp_token:
             return Response(
                 {"detail": "OTP token is required"}, status=status.HTTP_400_BAD_REQUEST
             )
 
         try:
+            # Query the UserVerification model for the given otp_token
             user_verification = UserVerification.objects.filter(
                 email_otp__exact=otp_token
             ).first()
@@ -153,6 +119,8 @@ class VerifyEmailView(APIView):
             return Response(
                 {"detail": "Invalid OTP token"}, status=status.HTTP_400_BAD_REQUEST
             )
+
+        # Check if user_verification exists and the email has not expired
         if user_verification and (
             user_verification.email_expiration_time > timezone.now()
             and not user_verification.user.is_verified
@@ -215,3 +183,53 @@ class ResendTokenView(APIView):
             {"detail": "New OTP has been sent to your email"}, status=status.HTTP_200_OK
         )
 
+
+class LoginView(APIView):
+    def post(self, request, *args, **kwargs):
+        """
+        Handle POST requests to the API endpoint.
+
+        Args:
+            request: The request object containing the data.
+            *args: Additional positional arguments.
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            A response object with the appropriate tokens and status code.
+        """
+        # Get the email and password from the request data
+        email = request.data.get("email")
+        password = request.data.get("password")
+
+        # Check if email or password is missing
+        if not email or not password:
+            return self.invalid_credentials_response()
+
+        # Authenticate the user with the provided email and password
+        user = authenticate(request, email=email, password=password)
+
+        # Check if user is None (invalid credentials)
+        if user is None:
+            return self.invalid_credentials_response()
+
+        # Check if user's email is not verified
+        if not user.is_verified:
+            return self.unverified_email_response()
+
+        # Create JWT tokens for the authenticated user
+        tokens = create_jwt_pair_for_user(user)
+
+        # Return the tokens with a 200 OK status code
+        return Response(tokens, status=status.HTTP_200_OK)
+
+    def invalid_credentials_response(self):
+        return Response(
+            {"detail": "Invalid email or password."},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    def unverified_email_response(self):
+        return Response(
+            {"detail": "Email is not verified."},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
