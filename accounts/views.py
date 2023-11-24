@@ -3,6 +3,7 @@ from django.contrib.auth import authenticate
 from django.utils import timezone
 from .tokens import create_jwt_pair_for_user
 from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.serializers import ValidationError
@@ -233,3 +234,17 @@ class LoginView(APIView):
             {"detail": "Email is not verified."},
             status=status.HTTP_401_UNAUTHORIZED,
         )
+
+
+class AvailableRidersView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        # Retrieve the list of available riders
+        available_riders = Rider.objects.filter(is_available=True)
+
+        # Serialize the data
+        serializer = RiderSerializer(available_riders, many=True)
+
+        # Return the serialized data as a response
+        return Response(serializer.data, status=status.HTTP_200_OK)

@@ -22,4 +22,9 @@ urlpatterns = [
     ),
     path("verify-email/", views.VerifyEmailView.as_view(), name="verify-email"),
     path("login/", views.LoginView.as_view(), name="login"),
+    path(
+        "available-riders/",
+        views.AvailableRidersView.as_view(),
+        name="available-riders",
+    ),
 ]
