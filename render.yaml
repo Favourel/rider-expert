@@ -1,0 +1,25 @@
+services:
+  - name: web
+    buildCommand: "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+    env: [
+      "DEBUG=1",
+      "DJANGO_DB_HOST=db",
+      "DJANGO_DB_PORT=5432",
+      "DJANGO_DB_NAME=riderexpert",
+      "DJANGO_DB_USER=riderexpert",
+      "DJANGO_DB_PASSWORD=testdatabase"
+    ]
+    dockerfile: Dockerfile
+    envVars: [
+      {
+        key: DJANGO_SETTINGS_MODULE
+        value: "your_project_name.settings"
+      }
+    ]
+    services:
+      - name: postgres
+        env: [
+          "POSTGRES_DB=riderexpert",
+          "POSTGRES_USER=riderexpert",
+          "POSTGRES_PASSWORD=testdatabase"
+        ]
