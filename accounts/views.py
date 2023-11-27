@@ -243,6 +243,10 @@ class AvailableRidersView(APIView):
         # Retrieve the list of available riders
         available_riders = Rider.objects.filter(is_available=True)
 
+        if not available_riders.exists():
+            # If there are no available riders, return a 204 No Content response
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
         # Serialize the data
         serializer = RiderSerializer(available_riders, many=True)
 
