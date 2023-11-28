@@ -37,7 +37,7 @@ def send_verification_email(user, purpose):
 
     # Save the OTP in the OTP model
     otp_instance, created = UserVerification.objects.get_or_create(user=user)
-    otp_instance.email_otp = otp_code
+    otp_instance.otp = otp_code
     otp_instance.created_at = timezone.now()
-    otp_instance.email_expiration_time = timezone.now() + timezone.timedelta(minutes=30)
+    otp_instance.otp_expiration_time = timezone.now() + timezone.timedelta(minutes=30)
     otp_instance.save()
