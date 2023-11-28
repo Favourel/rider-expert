@@ -1,4 +1,5 @@
 from django.db import transaction, IntegrityError
+from django.core.exceptions import ObjectDoesNotExist
 from django.contrib.auth import authenticate
 from django.utils import timezone
 from .tokens import create_jwt_pair_for_user
@@ -232,4 +233,29 @@ class LoginView(APIView):
         return Response(
             {"detail": "Email is not verified."},
             status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+
+class ForgotPasswordView(APIView):
+    def post(self, request, *args, **kwargs):
+        email = request.data.get("email")
+
+        if not email:
+            return Response(
+                {"detail": "Email is required"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            user = CustomUser.objects.get(email=email)
+        except ObjectDoesNotExist:
+            return Response(
+                {"detail": "User with this email does not exist"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        send_verification_email(user, purpose="forgot_password")
+
+        return Response(
+            {"detail": "An email with OTP has been sent to your email address"},
+            status=status.HTTP_200_OK,
         )
