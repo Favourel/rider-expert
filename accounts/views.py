@@ -9,6 +9,7 @@ from rest_framework.serializers import ValidationError
 from .serializers import *
 from .models import *
 from .utils import send_verification_email
+import datetime
 
 import logging
 
@@ -42,7 +43,8 @@ class BaseUserRegistrationView(APIView):
                         user_obj = self.user_model.objects.create(user=user)
 
                         # Serialize the user object
-                        user_obj_serializer = self.serializer_class(user_obj).data
+                        user_obj_serializer = self.serializer_class(
+                            user_obj).data
 
                         if user_obj_serializer:
                             # Send a welcome email or perform any additional actions
@@ -58,7 +60,8 @@ class BaseUserRegistrationView(APIView):
                             )
                         else:
                             # Raise a validation error if the user object serialization fails
-                            raise ValidationError(detail=user_obj_serializer.errors)
+                            raise ValidationError(
+                                detail=user_obj_serializer.errors)
                 except IntegrityError as e:
                     # Handle integrity errors
                     logger.error(f"Integrity error: {e}")
@@ -233,3 +236,47 @@ class LoginView(APIView):
             {"detail": "Email is not verified."},
             status=status.HTTP_401_UNAUTHORIZED,
         )
+
+
+class UserPasswordResetView(APIView):
+    def post(self, request, *args, **kwargs):
+        new_password = request.data.get("password")
+        confirm_password = request.data.get("confirm_password")
+        otp_code = request.data.get("otp_code")
+        email = request.data.get("email")
+
+        if not new_password:
+            return Response({'detail': 'New Password is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not email:
+            return Response({'detail': 'Email is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not otp_code:
+            return Response({'detail': 'OTP is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user_verification = UserVerification.objects.get(
+                user__email=email, email_otp=otp_code)
+        except UserVerification.DoesNotExist:
+            return Response({'detaul': 'User not found or verification record missing'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # check expiration of otp_code
+        expiration_time = user_verification.email_expiration_time
+        if expiration_time and expiration_time < datetime.now():
+            return Response({'detail': 'OTP has expired, request new OTP'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Check if new password and confirm password match
+        if new_password != confirm_password:
+            return Response({'detail': 'New password and confirm password do not match'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Reset user's password
+        user = user_verification.user
+        user.set_password(new_password)
+        user.save()
+
+        # Clear the OTP data
+        # user_verification.email_otp = None
+        # user_verification.email_expiration_time = None
+        # user_verification.save()
+
+        return Response({'detail': 'Password reset successfully'}, status=status.HTTP_200_OK)
