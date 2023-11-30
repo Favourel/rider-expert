@@ -14,14 +14,20 @@ def generate_otp():
     return otp_value
 
 
-def send_verification_email(user):
-    subject = "One time passcode for Email verification"
+def send_verification_email(user, purpose):
+    if purpose == "registration":
+        subject = "One time passcode for Email verification"
+        email_body = "Hi {} thanks for signing up on {} \nplease verify your email with the one time code {}".format(
+            user.first_name, current_site, otp_code
+        )
+    elif purpose == "forgot_password":
+        subject = "Reset your password"
+        email_body = "Hi {} you requested a password reset on {} \nplease reset your password with the one-time code {}".format(
+            user.first_name, current_site, otp_code
+        )
     otp_code = generate_otp()
     email = user.email
     current_site = "myAuth.com"
-    email_body = "Hi {} thanks for signing up on {} \nplease verify your email with the one time code {}".format(
-        user.first_name, current_site, otp_code
-    )
     from_email = settings.DEFAULT_FROM_EMAIL
 
     try:
@@ -31,7 +37,7 @@ def send_verification_email(user):
 
     # Save the OTP in the OTP model
     otp_instance, created = UserVerification.objects.get_or_create(user=user)
-    otp_instance.email_otp = otp_code
+    otp_instance.otp = otp_code
     otp_instance.created_at = timezone.now()
-    otp_instance.email_expiration_time = timezone.now() + timezone.timedelta(minutes=30)
+    otp_instance.otp_expiration_time = timezone.now() + timezone.timedelta(minutes=30)
     otp_instance.save()
