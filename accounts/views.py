@@ -114,7 +114,7 @@ class VerifyEmailView(APIView):
         try:
             # Query the UserVerification model for the given otp_token
             user_verification = UserVerification.objects.filter(
-                email_otp__exact=otp_token
+                otp__exact=otp_token
             ).first()
         except UserVerification.DoesNotExist:
             return Response(
@@ -123,7 +123,7 @@ class VerifyEmailView(APIView):
 
         # Check if user_verification exists and the email has not expired
         if user_verification and (
-            user_verification.email_expiration_time > timezone.now()
+            user_verification.otp_expiration_time > timezone.now()
             and not user_verification.user.is_verified
         ):
             # Mark the user as verified
@@ -131,8 +131,8 @@ class VerifyEmailView(APIView):
             user_verification.user.save()
 
             # Invalidate the OTP token
-            user_verification.email_otp = None
-            user_verification.email_expiration_time = None
+            user_verification.otp = None
+            user_verification.otp_expiration_time = None
             user_verification.save()
 
             return Response(
@@ -170,7 +170,7 @@ class ResendTokenView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if user_verification.email_expiration_time > timezone.now():
+        if user_verification.otp_expiration_time > timezone.now():
             # The previous OTP has not expired, no need to resend
             return Response(
                 {"detail": "Previous OTP has not expired"},

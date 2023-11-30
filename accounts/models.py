@@ -37,9 +37,9 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
 
 class UserVerification(models.Model):
     user = models.OneToOneField(CustomUser, on_delete=models.CASCADE)
-    email_otp = models.CharField(max_length=10, null=True, blank=True)
+    otp = models.CharField(max_length=10, null=True, blank=True)
     created_at = models.DateTimeField(default=timezone.now)
-    email_expiration_time = models.DateTimeField(null=True, blank=True)
+    otp_expiration_time = models.DateTimeField(null=True, blank=True)
 
 
 class Customer(models.Model):
