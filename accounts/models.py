@@ -6,6 +6,8 @@ from django.db import models
 from django.utils import timezone
 from .managers import CustomUserManager
 from django.core.validators import EmailValidator
+import datetime
+
 
 
 email_validator = EmailValidator(message="Enter a valid email address.")
@@ -40,6 +42,11 @@ class UserVerification(models.Model):
     email_otp = models.CharField(max_length=10, null=True, blank=True)
     created_at = models.DateTimeField(default=timezone.now)
     email_expiration_time = models.DateTimeField(null=True, blank=True)
+    
+    @property
+    def expired(self):
+        return self.expiration_time < datetime.now()
+
 
 
 class Customer(models.Model):

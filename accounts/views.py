@@ -248,9 +248,6 @@ class UserPasswordResetView(APIView):
         if not new_password:
             return Response({'detail': 'New Password is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-        if not email:
-            return Response({'detail': 'Email is required'}, status=status.HTTP_400_BAD_REQUEST)
-
         if not otp_code:
             return Response({'detail': 'OTP is required'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -258,25 +255,17 @@ class UserPasswordResetView(APIView):
             user_verification = UserVerification.objects.get(
                 user__email=email, email_otp=otp_code)
         except UserVerification.DoesNotExist:
-            return Response({'detaul': 'User not found or verification record missing'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': 'User not found or verification record missing'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # check expiration of otp_code
-        expiration_time = user_verification.email_expiration_time
-        if expiration_time and expiration_time < datetime.now():
+        if user_verification.expired:
             return Response({'detail': 'OTP has expired, request new OTP'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Check if new password and confirm password match
         if new_password != confirm_password:
             return Response({'detail': 'New password and confirm password do not match'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Reset user's password
         user = user_verification.user
         user.set_password(new_password)
         user.save()
 
-        # Clear the OTP data
-        # user_verification.email_otp = None
-        # user_verification.email_expiration_time = None
-        # user_verification.save()
-
         return Response({'detail': 'Password reset successfully'}, status=status.HTTP_200_OK)
+    
