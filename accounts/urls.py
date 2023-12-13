@@ -27,4 +27,5 @@ urlpatterns = [
         views.AvailableRidersView.as_view(),
         name="available-riders",
     ),
+    path("forgot_password/", views.ForgotPasswordView.as_view(), name="forgot_password")
 ]

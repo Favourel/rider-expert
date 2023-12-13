@@ -37,9 +37,9 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
 
 class UserVerification(models.Model):
     user = models.OneToOneField(CustomUser, on_delete=models.CASCADE)
-    email_otp = models.CharField(max_length=10, null=True, blank=True)
+    otp = models.CharField(max_length=10, null=True, blank=True)
     created_at = models.DateTimeField(default=timezone.now)
-    email_expiration_time = models.DateTimeField(null=True, blank=True)
+    otp_expiration_time = models.DateTimeField(null=True, blank=True)
 
 
 class Customer(models.Model):
@@ -53,12 +53,12 @@ class Rider(models.Model):
     vehicle_type = models.CharField(max_length=50, default="TWO_WHEELER")
     vehicle_registration_number = models.CharField(max_length=20, unique=True)
     is_available = models.BooleanField(default=True)
-    min_capacity = models.PositiveIntegerField()
-    max_capacity = models.PositiveIntegerField()
+    min_capacity = models.PositiveIntegerField(null=True, blank=True)
+    max_capacity = models.PositiveIntegerField(null=True, blank=True)
     fragile_item_allowed = models.BooleanField(default=True)
     charge_per_mile = models.DecimalField(
-        max_digits=6, decimal_places=2
-    )  # Adjusted precision
+        max_digits=6, decimal_places=2, null=True, blank=True
+    )
     ratings = models.DecimalField(max_digits=3, decimal_places=2, null=True, blank=True)
 
     def __str__(self):

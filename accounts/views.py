@@ -1,4 +1,5 @@
 from django.db import transaction, IntegrityError
+from django.core.exceptions import ObjectDoesNotExist
 from django.contrib.auth import authenticate
 from django.utils import timezone
 from .tokens import create_jwt_pair_for_user
@@ -114,7 +115,7 @@ class VerifyEmailView(APIView):
         try:
             # Query the UserVerification model for the given otp_token
             user_verification = UserVerification.objects.filter(
-                email_otp__exact=otp_token
+                otp__exact=otp_token
             ).first()
         except UserVerification.DoesNotExist:
             return Response(
@@ -123,7 +124,7 @@ class VerifyEmailView(APIView):
 
         # Check if user_verification exists and the email has not expired
         if user_verification and (
-            user_verification.email_expiration_time > timezone.now()
+            user_verification.otp_expiration_time > timezone.now()
             and not user_verification.user.is_verified
         ):
             # Mark the user as verified
@@ -131,8 +132,8 @@ class VerifyEmailView(APIView):
             user_verification.user.save()
 
             # Invalidate the OTP token
-            user_verification.email_otp = None
-            user_verification.email_expiration_time = None
+            user_verification.otp = None
+            user_verification.otp_expiration_time = None
             user_verification.save()
 
             return Response(
@@ -170,7 +171,7 @@ class ResendTokenView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if user_verification.email_expiration_time > timezone.now():
+        if user_verification.otp_expiration_time > timezone.now():
             # The previous OTP has not expired, no need to resend
             return Response(
                 {"detail": "Previous OTP has not expired"},
@@ -252,3 +253,28 @@ class AvailableRidersView(APIView):
 
         # Return the serialized data as a response
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class ForgotPasswordView(APIView):
+    def post(self, request, *args, **kwargs):
+        email = request.data.get("email")
+
+        if not email:
+            return Response(
+                {"detail": "Email is required"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            user = CustomUser.objects.get(email=email)
+        except ObjectDoesNotExist:
+            return Response(
+                {"detail": "User with this email does not exist"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        send_verification_email(user, purpose="forgot_password")
+
+        return Response(
+            {"detail": "An email with OTP has been sent to your email address"},
+            status=status.HTTP_200_OK,
+        )
