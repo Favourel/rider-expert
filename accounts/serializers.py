@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Customer, CustomUser, Rider
+from .models import *
 import logging
 
 logger = logging.getLogger(__name__)
@@ -113,4 +113,14 @@ class RiderSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Rider
-        fields = ("user", "is_available")
+        fields = [
+            "user",
+            "is_available",
+            "vehicle_type",
+            "vehicle_registration_number",
+            "min_capacity",
+            "max_capacity",
+            "fragile_item_allowed",
+            "ratings",
+            "charge_per_mile",
+        ]
