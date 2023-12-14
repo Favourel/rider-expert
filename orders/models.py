@@ -1,20 +1,20 @@
 from django.db import models
-from accounts.models import Customer,Rider
+from accounts.models import Customer, Rider
 
 # Create your models here.
 class Order(models.Model):
     STATUS_CHOICES = [
-        ('Pending Pickup', 'Pending Pickup'),
-        ('Waiting for pickup', 'Waiting for pickup'),
-        ('Picked up', 'Picked up'),
-        ('In transit', 'In transit'),
+        ('PendingPickup', 'Pending Pickup'),
+        ('WaitingForPickup', 'Waiting for pickup'),
+        ('PickedUp', 'Picked up'),
+        ('InTransit', 'In transit'),
         ('Arrived', 'Arrived'),
         ('Delivered', 'Delivered'),
         ('Failed', 'Failed'),
     ]
     
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE)
-    rider = models.ForeignKey(Rider, on_delete=models.CASCADE)
+    rider = models.ForeignKey(Rider, on_delete=models.CASCADE, default=None)
     pickup_address = models.TextField()
     order_number = models.CharField(max_length=20, unique=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES)
