@@ -259,3 +259,4 @@ class ForgotPasswordView(APIView):
             {"detail": "An email with OTP has been sent to your email address"},
             status=status.HTTP_200_OK,
         )
+
