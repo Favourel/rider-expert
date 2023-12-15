@@ -243,7 +243,6 @@ class UserPasswordResetView(APIView):
         new_password = request.data.get("password")
         confirm_password = request.data.get("confirm_password")
         otp_code = request.data.get("otp_code")
-        email = request.data.get("email")
 
         if not new_password:
             return Response({'detail': 'New Password is required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -268,4 +267,3 @@ class UserPasswordResetView(APIView):
         user.save()
 
         return Response({'detail': 'Password reset successfully'}, status=status.HTTP_200_OK)
-    
