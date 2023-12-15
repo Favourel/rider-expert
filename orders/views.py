@@ -16,7 +16,6 @@ class OrderCreateView(APIView):
             delivery_location = serializer.validated_data['delivery_location']
 
             order = Order.objects.create(
-                product_id=product_id,
                 quantity=quantity,
                 pickup_location=pickup_location,
                 delivery_location=delivery_location,
