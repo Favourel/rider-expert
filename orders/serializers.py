@@ -5,3 +5,9 @@ class OrderSerializer(serializers.Serializer):
     quantity = serializers.IntegerField()
     pickup_location = serializers.CharField()
     delivery_location = serializers.CharField()
+
+class OrderDetailSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Order
+        fields = '__all__'
+        
