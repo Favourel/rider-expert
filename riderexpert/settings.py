@@ -18,6 +18,7 @@ from datetime import timedelta
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 LOG_FILE_PATH = os.path.join(BASE_DIR, "logs", "logfile.log")
+GOOGLE_MAPS_API_KEY = "AIzaSyASqmz9ihi9DHZT6KZAaQTsx56e8QnWooA"
 
 
 # Quick-start development settings - unsuitable for production
@@ -44,7 +45,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "django_extensions",
     "rest_framework_simplejwt",
-    "accounts"
+    "accounts",
 ]
 
 MIDDLEWARE = [
@@ -143,8 +144,8 @@ REST_FRAMEWORK = {
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(hours=5),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
-    'SIGNING_KEY': SECRET_KEY,
-    'AUTH_HEADER_TYPES': ('Bearer',),
+    "SIGNING_KEY": SECRET_KEY,
+    "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
 # Internationalization

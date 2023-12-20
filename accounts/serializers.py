@@ -124,3 +124,4 @@ class RiderSerializer(serializers.ModelSerializer):
             "ratings",
             "charge_per_mile",
         ]
+        

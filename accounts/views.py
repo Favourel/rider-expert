@@ -1,3 +1,5 @@
+from django.db.models import ExpressionWrapper, F, FloatField
+from django.db.models.functions import Cast
 from django.db import transaction, IntegrityError
 from django.core.exceptions import ObjectDoesNotExist
 from django.contrib.auth import authenticate
@@ -10,7 +12,11 @@ from rest_framework import status
 from rest_framework.serializers import ValidationError
 from .serializers import *
 from .models import *
-from .utils import send_verification_email
+from .utils import send_verification_email, str_to_bool
+from django.core.exceptions import ValidationError
+from django.conf import settings
+import googlemaps
+from googlemaps.exceptions import ApiError
 
 import logging
 
@@ -48,7 +54,7 @@ class BaseUserRegistrationView(APIView):
 
                         if user_obj_serializer:
                             # Send a welcome email or perform any additional actions
-                            send_verification_email(user)
+                            send_verification_email(user, "registration")
 
                             # Return a response with the serialized user object and a success message
                             return Response(
@@ -237,24 +243,6 @@ class LoginView(APIView):
         )
 
 
-class AvailableRidersView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request, *args, **kwargs):
-        # Retrieve the list of available riders
-        available_riders = Rider.objects.filter(is_available=True)
-
-        if not available_riders.exists():
-            # If there are no available riders, return a 204 No Content response
-            return Response(status=status.HTTP_204_NO_CONTENT)
-
-        # Serialize the data
-        serializer = RiderSerializer(available_riders, many=True)
-
-        # Return the serialized data as a response
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
-
 class ForgotPasswordView(APIView):
     def post(self, request, *args, **kwargs):
         email = request.data.get("email")
@@ -278,3 +266,115 @@ class ForgotPasswordView(APIView):
             {"detail": "An email with OTP has been sent to your email address"},
             status=status.HTTP_200_OK,
         )
+
+
+class GetAvailableRidersView(APIView):
+    permission_classes = [IsAuthenticated]
+    SEARCH_RADIUS_METERS = getattr(settings, "SEARCH_RADIUS_METERS", 50)
+
+    def get_google_maps_client(self):
+        """Initialize and return the Google Maps API client."""
+        return googlemaps.Client(key=settings.GOOGLE_MAPS_API_KEY)
+
+    def validate_parameters(self, order_location, item_capacity, is_fragile):
+        """Validate input parameters."""
+        try:
+            item_capacity = float(item_capacity)
+            is_fragile = str_to_bool(is_fragile)
+        except (ValueError, TypeError):
+            return False, "Invalid or missing parameters"
+
+        if not all(
+            [
+                order_location is not None and isinstance(order_location, str),
+                item_capacity is not None and isinstance(item_capacity, (int, float)),
+                is_fragile is not None and isinstance(is_fragile, bool),
+            ]
+        ):
+            return False, "Invalid or missing parameters"
+        return True, ""
+
+    def handle_google_maps_api_error(self, e):
+        """Handle Google Maps API errors."""
+        return Response(
+            {"status": "error", "message": f"Google Maps API error: {str(e)}"},
+            status=400,
+        )
+
+    def handle_internal_error(self, e):
+        """Handle internal server errors."""
+        logger.error(str(e))
+        return Response(
+            {"status": "error", "message": "Error processing the request"}, status=500
+        )
+
+    def get(self, request, *args, **kwargs):
+        order_location = request.GET.get("origin")
+        item_capacity = request.GET.get("item_capacity")
+        is_fragile = request.GET.get("is_fragile")
+        
+        # Handle Missing or Invalid Parameters
+        is_valid, validation_message = self.validate_parameters(
+            order_location, item_capacity, is_fragile
+        )
+        if not is_valid:
+            return Response(
+                {"status": "error", "message": validation_message}, status=400
+            )
+
+        try:
+            # Initialize Google Maps API client
+            gmaps = self.get_google_maps_client()
+
+            # Optimize Database Queries
+            available_riders = self.get_available_riders(
+                gmaps, order_location, item_capacity, is_fragile
+            )
+
+            return Response({"status": "success", "riders": available_riders})
+        except googlemaps.exceptions.ApiError as e:
+            logger.error(f"Google Maps API error: {str(e)}")
+            return self.handle_google_maps_api_error(e)
+        except Exception as e:
+            return self.handle_internal_error(e)
+
+    def get_available_riders(self, gmaps, order_location, item_capacity, is_fragile):
+        """Retrieve available riders based on specified criteria."""
+        try:
+            available_riders = Rider.objects.filter(
+            is_available=True,
+            current_latitude__isnull=False,
+            current_longitude__isnull=False,
+            fragile_item_allowed=is_fragile,
+            min_capacity__lte=item_capacity,
+            max_capacity__gte=item_capacity,
+        )
+
+            riders_within_radius = []
+            for rider in available_riders:
+                rider_location = (float(rider.current_latitude), float(rider.current_longitude))
+
+                distance_matrix_result = gmaps.distance_matrix(
+                    origins=order_location,
+                    destinations=rider_location,
+                    mode="driving",
+                    units="metric"
+                )
+
+                distance = distance_matrix_result["rows"][0]["elements"][0]["distance"]
+                duration = distance_matrix_result["rows"][0]["elements"][0]["duration"]["text"]
+                print(distance, duration)
+                if distance["value"] <= self.SEARCH_RADIUS_METERS:
+                    # Include both distance and duration in the response
+                    rider_data = {
+                        "rider": RiderSerializer(rider, many=True).data,
+                        "distance": distance,
+                        "duration": duration,
+                    }
+                    riders_within_radius.append(rider_data)
+
+            return riders_within_radius
+
+        except ApiError as e:
+            return self.handle_google_maps_api_error(e)
+
