@@ -44,7 +44,10 @@ class UserVerification(models.Model):
 
 class Customer(models.Model):
     user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, primary_key=True)
-    
+
+    def __str__(self):
+        return self.user.email
+
 
 class Rider(models.Model):
     user = models.OneToOneField(
@@ -59,9 +62,18 @@ class Rider(models.Model):
     charge_per_mile = models.DecimalField(
         max_digits=6, decimal_places=2, null=True, blank=True
     )
-    current_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-    current_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    current_latitude = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True
+    )
+    current_longitude = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True
+    )
     ratings = models.DecimalField(max_digits=3, decimal_places=2, null=True, blank=True)
 
     def __str__(self):
         return self.user.email
+
+    def update_location(self, latitude, longitude):
+        self.current_latitude = latitude
+        self.current_longitude = longitude
+        self.save()
