@@ -65,8 +65,15 @@ class BaseUserRegistrationView(APIView):
                                 status=status.HTTP_201_CREATED,
                             )
                         else:
-                            # Raise a validation error if the user object serialization fails
-                            raise ValidationError(detail=user_obj_serializer.errors)
+                            # Raise a validation error if the user serializer is not valid
+                            return Response(
+                                {
+                                    "detail": "Validation error",
+                                    "errors": user_serializer.errors,
+                                },
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
+
                 except IntegrityError as e:
                     # Handle integrity errors
                     logger.error(f"Integrity error: {e}")
@@ -85,7 +92,10 @@ class BaseUserRegistrationView(APIView):
                     )
         else:
             # Raise a validation error if the user serializer is not valid
-            raise ValidationError(detail=user_serializer.errors)
+            return Response(
+                {"detail": "Validation error", "errors": user_serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
 
 class RiderRegistrationView(BaseUserRegistrationView):
@@ -270,7 +280,7 @@ class ForgotPasswordView(APIView):
 
 class GetAvailableRidersView(APIView):
     permission_classes = [IsAuthenticated]
-    SEARCH_RADIUS_METERS = getattr(settings, "SEARCH_RADIUS_METERS", 50)
+    SEARCH_RADIUS_METERS = 10
 
     def get_google_maps_client(self):
         """Initialize and return the Google Maps API client."""
@@ -312,7 +322,7 @@ class GetAvailableRidersView(APIView):
         order_location = request.GET.get("origin")
         item_capacity = request.GET.get("item_capacity")
         is_fragile = request.GET.get("is_fragile")
-        
+
         # Handle Missing or Invalid Parameters
         is_valid, validation_message = self.validate_parameters(
             order_location, item_capacity, is_fragile
@@ -342,32 +352,37 @@ class GetAvailableRidersView(APIView):
         """Retrieve available riders based on specified criteria."""
         try:
             available_riders = Rider.objects.filter(
-            is_available=True,
-            current_latitude__isnull=False,
-            current_longitude__isnull=False,
-            fragile_item_allowed=is_fragile,
-            min_capacity__lte=item_capacity,
-            max_capacity__gte=item_capacity,
-        )
+                is_available=True,
+                current_latitude__isnull=False,
+                current_longitude__isnull=False,
+                fragile_item_allowed=is_fragile,
+                min_capacity__lte=item_capacity,
+                max_capacity__gte=item_capacity,
+            )
 
             riders_within_radius = []
             for rider in available_riders:
-                rider_location = (float(rider.current_latitude), float(rider.current_longitude))
+                rider_location = (
+                    float(rider.current_latitude),
+                    float(rider.current_longitude),
+                )
 
                 distance_matrix_result = gmaps.distance_matrix(
                     origins=order_location,
                     destinations=rider_location,
                     mode="driving",
-                    units="metric"
+                    units="metric",
                 )
 
                 distance = distance_matrix_result["rows"][0]["elements"][0]["distance"]
-                duration = distance_matrix_result["rows"][0]["elements"][0]["duration"]["text"]
+                duration = distance_matrix_result["rows"][0]["elements"][0]["duration"][
+                    "text"
+                ]
                 print(distance, duration)
-                if distance["value"] <= self.SEARCH_RADIUS_METERS:
+                if distance["value"] <= self.SEARCH_RADIUS_METERS * 1000:
                     # Include both distance and duration in the response
                     rider_data = {
-                        "rider": RiderSerializer(rider, many=True).data,
+                        "rider": RiderSerializer(rider).data,
                         "distance": distance,
                         "duration": duration,
                     }
@@ -377,4 +392,3 @@ class GetAvailableRidersView(APIView):
 
         except ApiError as e:
             return self.handle_google_maps_api_error(e)
-
