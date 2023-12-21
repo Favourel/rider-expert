@@ -1,5 +1,3 @@
-from django.db.models import ExpressionWrapper, F, FloatField
-from django.db.models.functions import Cast
 from django.db import transaction, IntegrityError
 from django.core.exceptions import ObjectDoesNotExist
 from django.contrib.auth import authenticate
@@ -9,11 +7,9 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.serializers import ValidationError
 from .serializers import *
 from .models import *
 from .utils import send_verification_email, str_to_bool
-from django.core.exceptions import ValidationError
 from django.conf import settings
 import googlemaps
 from googlemaps.exceptions import ApiError
