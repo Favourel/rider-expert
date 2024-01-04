@@ -46,3 +46,29 @@ def send_verification_email(user, purpose):
 
 def str_to_bool(s):
     return s.lower() in ["true", "1", "yes", "on"]
+
+
+def validate_password(value):
+    # Password must be at least 8 characters long
+    if len(value) < 8:
+        raise serializers.ValidationError(
+            "Password must be at least 8 characters long."
+        )
+
+    # Check for at least one uppercase character
+    if not any(char.isupper() for char in value):
+        raise serializers.ValidationError(
+            "Password must contain at least one uppercase character."
+        )
+
+    # Check for at least one special character
+    special_characters = "!@#$%^&*()-_=+[]{}|;:'\",.<>/?"
+    if not any(char in special_characters for char in value):
+        raise serializers.ValidationError(
+            "Password must contain at least one special character."
+        )
+
+    # Check for at least one number
+    if not any(char.isdigit() for char in value):
+        raise serializers.ValidationError("Password must contain at least one number.")
+    return value

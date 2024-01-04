@@ -14,7 +14,6 @@ import os
 from pathlib import Path
 from datetime import timedelta
 
-
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 LOG_FILE_PATH = os.path.join(BASE_DIR, "logs", "logfile.log")
@@ -47,6 +46,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt",
     "accounts",
     "orders",
+    "adrf"
 ]
 
 MIDDLEWARE = [
