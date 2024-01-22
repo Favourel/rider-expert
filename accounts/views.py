@@ -285,7 +285,6 @@ class GetAvailableRidersView(AsyncAPIView):
             available_riders = await self.get_available_riders(
                 gmaps, order_location, item_capacity, is_fragile
             )
-            print("Available Riders: ", available_riders)
             return Response({"status": "success", "riders": available_riders})
         except ApiError as e:
             logger.error(f"Google Maps API error: {str(e)}")
@@ -293,15 +292,6 @@ class GetAvailableRidersView(AsyncAPIView):
         except Exception as e:
             return self.handle_internal_error(e)
 
-    def get_available_riders_django(self, email, is_fragile, item_capacity):
-        queryset = Rider.objects.filter(
-            user__email=email,
-            is_available=True,
-            fragile_item_allowed=is_fragile,
-            min_capacity__lte=item_capacity,
-            max_capacity__gte=item_capacity,
-        )
-        return queryset.exists(), queryset.first()
 
     async def get_available_riders(
         self, gmaps, order_location, item_capacity, is_fragile
@@ -309,56 +299,66 @@ class GetAvailableRidersView(AsyncAPIView):
         try:
             riders_collection = riderexpert_db.collection("riders").stream()
 
-            riders_within_radius = []
             rider_locations = []
 
-            # Prepare a list of rider locations
+            # Prepare a list of rider locations and emails
+            emails = []
             async for firestore_rider in riders_collection:
                 firestore_data = firestore_rider.to_dict()
-                
                 email = firestore_data.get("email")
+                emails.append(email)
+                rider_location = (
+                    firestore_data.get("current_latitude"),
+                    firestore_data.get("current_longitude"),
+                )
+                rider_locations.append(rider_location)
 
-                exists, django_rider = await sync_to_async(
-                    self.get_available_riders_django
-                )(email, is_fragile, item_capacity)
-
-                if exists:
-                    rider_location = (
-                        firestore_data.get("current_latitude"),
-                        firestore_data.get("current_longitude"),
-                    )
-                    rider_locations.append(rider_location)
+            # Fetch all riders in a single query
+            riders = await sync_to_async(Rider.objects.filter)(
+                user__email__in=emails,
+                is_available=True,
+                fragile_item_allowed=is_fragile,
+                min_capacity__lte=item_capacity,
+                max_capacity__gte=item_capacity,
+            )
 
             # Make a single call to the distance matrix API
             if rider_locations:
-                origins = [order_location] * len(rider_locations)
+                origins = order_location
                 destinations = rider_locations
 
-                distance_matrix_result = await sync_to_async(gmaps.distance_matrix)(
-                    origins=origins,
-                    destinations=destinations,
-                    mode="driving",
-                    units="metric",
-                )
-                print("Distance Matrix: ", distance_matrix_result)
+                try:
+                    distance_matrix_result = await sync_to_async(gmaps.distance_matrix)(
+                        origins=origins,
+                        destinations=destinations,
+                        mode="driving",
+                        units="metric",
+                    )
+                except Exception as e:
+                    raise e
+
+                riders_within_radius = []
 
                 # Iterate over the response and filter out riders within the desired radius
                 for i, distance_row in enumerate(distance_matrix_result["rows"]):
-                    distance = distance_row["elements"][0]["distance"]
-                    duration = distance_row["elements"][0]["duration"]["text"]
-                    print(f"Rider {i} distance: {distance['text']}", f"Rider {i} duration: {duration}")
+                    for element in distance_row["elements"]:
+                        duration = element["duration"]["text"]
+                        distance = element["distance"]
 
-                    if distance["value"] <= self.SEARCH_RADIUS_METERS * 1000:
-                        # Include both distance and duration in the response
-                        rider_data = {
-                            "rider": await sync_to_async(self.getRiderSerializer)(
-                                django_rider
-                            ),
-                            "distance": distance,
-                            "duration": duration,
-                        }
-                        riders_within_radius.append(rider_data)
-            print("Riders: ", riders_within_radius)
+                        if distance["value"] <= self.SEARCH_RADIUS_METERS * 1000:
+                            # Include both distance and duration in the response
+                            rider_data = {
+                                "rider": await sync_to_async(self.getRiderSerializer)(
+                                    await sync_to_async(lambda i: riders[i])(i)
+                                ),
+                                "distance": distance,
+                                "duration": duration,
+                            }
+                            riders_within_radius.append(rider_data)
+
+                # Sort the riders_within_radius list based on distance
+                riders_within_radius.sort(key=lambda x: x["distance"]["value"])
+
             return riders_within_radius
 
         except ApiError as e:
