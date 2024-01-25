@@ -16,12 +16,17 @@ from django.conf import settings
 from googlemaps import Client as GoogleMapsClient
 from google.cloud import firestore
 from googlemaps.exceptions import ApiError
+import firebase_admin
+from firebase_admin import credentials, messaging
 
 import logging
 
 logger = logging.getLogger(__name__)
 
 riderexpert_db = firestore.AsyncClient(project="riderexpert", database="riderexpert-db")
+
+cred = credentials.Certificate("riderexpert-firebase-adminsdk-8eiae-55c277d9ed.json")
+riderexpert_app = firebase_admin.initialize_app(cred)
 
 
 class BaseRegistrationView(generics.CreateAPIView):
@@ -267,6 +272,7 @@ class GetAvailableRidersView(AsyncAPIView):
         order_location = request.GET.get("origin")
         item_capacity = request.GET.get("item_capacity")
         is_fragile = request.GET.get("is_fragile")
+        order_destination = request.GET.get("destination")
 
         # Handle Missing or Invalid Parameters
         is_valid, validation_message = await self.validate_parameters(
@@ -285,13 +291,18 @@ class GetAvailableRidersView(AsyncAPIView):
             available_riders = await self.get_available_riders(
                 gmaps, order_location, item_capacity, is_fragile
             )
-            return Response({"status": "success", "riders": available_riders})
+
+            # Extract FCM tokens and send notifications
+            await self.send_fcm_notifications(
+                available_riders, order_location, order_destination, is_fragile
+            )
+
+            return Response(status=status.HTTP_201_CREATED)
         except ApiError as e:
             logger.error(f"Google Maps API error: {str(e)}")
             return self.handle_google_maps_api_error(e)
         except Exception as e:
             return self.handle_internal_error(e)
-
 
     async def get_available_riders(
         self, gmaps, order_location, item_capacity, is_fragile
@@ -316,53 +327,125 @@ class GetAvailableRidersView(AsyncAPIView):
             # Fetch all riders in a single query
             riders = await sync_to_async(Rider.objects.filter)(
                 user__email__in=emails,
-                is_available=True,
                 fragile_item_allowed=is_fragile,
                 min_capacity__lte=item_capacity,
                 max_capacity__gte=item_capacity,
             )
 
-            # Make a single call to the distance matrix API
-            if rider_locations:
-                origins = order_location
-                destinations = rider_locations
+            batch_size = 20
 
-                try:
-                    distance_matrix_result = await sync_to_async(gmaps.distance_matrix)(
-                        origins=origins,
-                        destinations=destinations,
-                        mode="driving",
-                        units="metric",
-                    )
-                except Exception as e:
-                    raise e
-
-                riders_within_radius = []
-
-                # Iterate over the response and filter out riders within the desired radius
-                for i, distance_row in enumerate(distance_matrix_result["rows"]):
-                    for element in distance_row["elements"]:
-                        duration = element["duration"]["text"]
-                        distance = element["distance"]
-
-                        if distance["value"] <= self.SEARCH_RADIUS_METERS * 1000:
-                            # Include both distance and duration in the response
-                            rider_data = {
-                                "rider": await sync_to_async(self.getRiderSerializer)(
-                                    await sync_to_async(lambda i: riders[i])(i)
-                                ),
-                                "distance": distance,
-                                "duration": duration,
-                            }
-                            riders_within_radius.append(rider_data)
-
-                # Sort the riders_within_radius list based on distance
-                riders_within_radius.sort(key=lambda x: x["distance"]["value"])
+            # Fetch all riders in batches only if the total number of riders is greater than batch_size
+            if len(rider_locations) > batch_size:
+                riders_within_radius = await self.fetch_riders_in_batches(
+                    gmaps, order_location, rider_locations, batch_size, riders
+                )
+            else:
+                riders_within_radius = await self.fetch_all_riders(
+                    gmaps, order_location, rider_locations, riders
+                )
 
             return riders_within_radius
 
         except ApiError as e:
             return self.handle_google_maps_api_error(e)
 
+    async def fetch_riders_in_batches(
+        self, gmaps, order_location, rider_locations, batch_size, riders
+    ):
+        riders_within_radius = []
+
+        for i in range(0, len(rider_locations), batch_size):
+            batch_destinations = rider_locations[i : i + batch_size]
+            riders_within_radius += await self.process_distance_matrix_result(
+                gmaps, order_location, batch_destinations, riders
+            )
+
+        return riders_within_radius
+
+    async def fetch_all_riders(self, gmaps, order_location, rider_locations, riders):
+        return await self.process_distance_matrix_result(
+            gmaps, order_location, rider_locations, riders
+        )
+
+    async def process_distance_matrix_result(
+        self, gmaps, order_location, destinations, riders
+    ):
+        riders_within_radius = []
+
+        try:
+            distance_matrix_result = await sync_to_async(gmaps.distance_matrix)(
+                origins=order_location,
+                destinations=destinations,
+                mode="driving",
+                units="metric",
+            )
+        except Exception as e:
+            raise Exception(str(e))
+
+        # Iterate over the response and filter out riders within the desired radius
+        for i, distance_row in enumerate(distance_matrix_result["rows"]):
+            for element in distance_row["elements"]:
+                duration = element["duration"]["text"]
+                distance = element["distance"]
+
+                if distance["value"] <= self.SEARCH_RADIUS_METERS * 1000:
+                    # Include both distance and duration in the response
+                    rider_data = {
+                        "rider": await sync_to_async(self.getRiderSerializer)(
+                            await sync_to_async(lambda i: riders[i])(i)
+                        ),
+                        "distance": distance,
+                        "duration": duration,
+                    }
+                    riders_within_radius.append(rider_data)
+
+        # Sort the riders_within_radius list based on distance
+        riders_within_radius.sort(key=lambda x: x["distance"]["value"])
+
+        return riders_within_radius
+
     def getRiderSerializer(self, django_rider):
         return RiderSerializer(django_rider).data
+
+    async def send_fcm_notifications(
+        self, riders_within_radius, order_location, is_fragile
+    ):
+        # Extract all rider emails
+        rider_emails = [
+            rider_data["rider"]["user"]["email"] for rider_data in riders_within_radius
+        ]
+
+        # Fetch all FCM tokens for the given rider emails
+        rider_tokens = await self.get_fcm_tokens_by_emails(rider_emails)
+
+        # Construct FCM message
+        message_data = {
+            "order_location": order_location,
+            "is_fragile": str(is_fragile),
+            # Add any other relevant data to the message
+        }
+
+        # Send multicast FCM message
+        message = messaging.MulticastMessage(data=message_data, tokens=rider_tokens)
+        try:
+            await sync_to_async(messaging.send_multicast)(message)
+        except Exception as e:
+            # Handle FCM sending error
+            logger.error(f"FCM sending error: {str(e)}")
+
+    async def get_fcm_tokens_by_emails(self, rider_emails):
+        # Fetch FCM tokens from Firestore for multiple rider emails
+        rider_tokens = []
+
+        # Create a Firestore query for all riders with the specified emails
+        riders_query = riderexpert_db.collection("riders").where(
+            "email", "in", rider_emails
+        )
+
+        # Execute the query
+        async for rider_snapshot in sync_to_async(riders_query.stream)():
+            rider_data = rider_snapshot.to_dict()
+            fcm_token = rider_data.get("fcm_token")
+            rider_tokens.append(fcm_token)
+
+        return rider_tokens
