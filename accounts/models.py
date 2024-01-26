@@ -6,6 +6,8 @@ from django.db import models
 from django.utils import timezone
 from .managers import CustomUserManager
 from django.core.validators import EmailValidator
+import datetime
+
 
 
 email_validator = EmailValidator(message="Enter a valid email address.")

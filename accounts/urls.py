@@ -23,6 +23,7 @@ urlpatterns = [
     path("verify-email/", views.VerifyEmailView.as_view(), name="verify-email"),
     path("login/", views.LoginView.as_view(), name="login"),
     path(
-        "forgot_password/", views.ForgotPasswordView.as_view(), name="forgot_password"
+        "reset_password/", views.UserPasswordResetView.as_view(), name="reset_password"
     ),
+
 ]
