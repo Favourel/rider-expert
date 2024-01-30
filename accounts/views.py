@@ -10,6 +10,7 @@ from rest_framework.serializers import ValidationError
 from .serializers import *
 from .models import *
 from .utils import send_verification_email
+from django.shortcuts import get_object_or_404
 
 import logging
 
@@ -43,7 +44,8 @@ class BaseUserRegistrationView(APIView):
                         user_obj = self.user_model.objects.create(user=user)
 
                         # Serialize the user object
-                        user_obj_serializer = self.serializer_class(user_obj).data
+                        user_obj_serializer = self.serializer_class(
+                            user_obj).data
 
                         if user_obj_serializer:
                             # Send a welcome email or perform any additional actions
@@ -59,7 +61,8 @@ class BaseUserRegistrationView(APIView):
                             )
                         else:
                             # Raise a validation error if the user object serialization fails
-                            raise ValidationError(detail=user_obj_serializer.errors)
+                            raise ValidationError(
+                                detail=user_obj_serializer.errors)
                 except IntegrityError as e:
                     # Handle integrity errors
                     logger.error(f"Integrity error: {e}")
@@ -260,3 +263,9 @@ class ForgotPasswordView(APIView):
             status=status.HTTP_200_OK,
         )
 
+
+class AcceptDeclineOrder(APIView):
+    def get(self, request, rider_email, *args, **kwargs):
+        rider = get_object_or_404(Rider, email=rider_email)
+        serializer = AcceptDeclineOrderSerializer(rider)
+        return Response(serializer.data, {'detail': 'Ride accepted successfully'}, status=status.HTTP_200_OK)

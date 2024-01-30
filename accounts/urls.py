@@ -25,4 +25,7 @@ urlpatterns = [
     path(
         "forgot_password/", views.ForgotPasswordView.as_view(), name="forgot_password"
     ),
+    path(
+        "accept-decline-ride/", views.AcceptDeclineOrder.as_view(), name="accept_decline_rider"
+    ),
 ]
