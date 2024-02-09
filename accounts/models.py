@@ -6,6 +6,8 @@ from django.db import models
 from django.utils import timezone
 from .managers import CustomUserManager
 from django.core.validators import EmailValidator
+import datetime
+
 
 
 email_validator = EmailValidator(message="Enter a valid email address.")
@@ -55,7 +57,13 @@ class Rider(models.Model):
     )
     vehicle_type = models.CharField(max_length=50, default="TWO_WHEELER")
     vehicle_registration_number = models.CharField(max_length=20, unique=True)
-    is_available = models.BooleanField(default=True)
+    min_capacity = models.PositiveIntegerField(null=True, blank=True)
+    max_capacity = models.PositiveIntegerField(null=True, blank=True)
+    fragile_item_allowed = models.BooleanField(default=True)
+    charge_per_mile = models.DecimalField(
+        max_digits=6, decimal_places=2, null=True, blank=True
+    )
+    ratings = models.DecimalField(max_digits=3, decimal_places=2, null=True, blank=True)
 
     def __str__(self):
         return self.user.email
