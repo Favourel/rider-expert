@@ -5,6 +5,55 @@ from rest_framework import serializers
 import pyotp
 from django.conf import settings
 from .models import UserVerification
+from math import radians, sin, cos, sqrt, atan2
+
+
+class DistanceCalculator:
+    def __init__(self, origin):
+        self.origin = origin
+
+    def haversine_distance(self, lat1, lon1, lat2, lon2):
+        """
+        Calculate the distance between two points on the Earth's surface
+        using the Haversine formula.
+
+        Parameters:
+        lat1, lon1: Latitude and longitude of point 1 (in degrees).
+        lat2, lon2: Latitude and longitude of point 2 (in degrees).
+
+        Returns:
+        Distance between the two points in kilometers.
+        """
+        # Convert latitude and longitude from degrees to radians
+        lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
+
+        # Haversine formula
+        dlat = lat2 - lat1
+        dlon = lon2 - lon1
+        a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
+        c = 2 * atan2(sqrt(a), sqrt(1 - a))
+        distance = 6371 * c  # Earth radius in kilometers
+        return distance
+
+    def destinations_within_radius(self, destinations, radius):
+        """
+        Find destinations within a specified radius of the origin.
+
+        Parameters:
+        destinations: List of tuples, each containing latitude and longitude of a destination.
+        radius: Radius in kilometers.
+
+        Returns:
+        List of destinations within the specified radius of the origin.
+        """
+        within_radius = []
+        for destination in destinations:
+            distance = self.haversine_distance(
+                self.origin[0], self.origin[1], destination[0], destination[1]
+            )
+            if distance <= radius:
+                within_radius.append((distance, destination))
+        return within_radius
 
 
 def generate_otp():

@@ -13,7 +13,7 @@ from .serializers import *
 from .models import *
 from .utils import send_verification_email, str_to_bool
 from django.conf import settings
-from googlemaps import Client as GoogleMapsClient
+from mapbox_distance_matrix.distance_matrix import MapboxDistanceDuration
 from google.cloud import firestore
 from googlemaps.exceptions import ApiError
 import firebase_admin
@@ -234,9 +234,9 @@ class GetAvailableRidersView(AsyncAPIView):
     permission_classes = [IsAuthenticated]
     SEARCH_RADIUS_METERS = 10
 
-    def get_google_maps_client(self):
-        """Initialize and return the asynchronous Google Maps API client."""
-        return GoogleMapsClient(key=settings.GOOGLE_MAPS_API_KEY)
+    def get_mapbox_client(self):
+        """Initialize and return the asynchronous Mapbox API client."""
+        return MapboxDistanceDuration(api_key=settings.MAPBOX_API_KEY)
 
     async def validate_parameters(self, order_location, item_capacity, is_fragile):
         """Validate input parameters."""
@@ -256,8 +256,8 @@ class GetAvailableRidersView(AsyncAPIView):
             return False, "Invalid or missing parameters"
         return True, ""
 
-    def handle_google_maps_api_error(self, e):
-        """Handle Google Maps API errors."""
+    def handle_mapbox_api_error(self, e):
+        """Handle Mapbox API errors."""
         return Response(
             {"status": "error", "message": f"Google Maps API error: {str(e)}"},
             status=400,
@@ -285,8 +285,9 @@ class GetAvailableRidersView(AsyncAPIView):
 
         try:
             # Initialize asynchronous Google Maps API client
-            gmaps = await sync_to_async(self.get_google_maps_client)()
+            mapbox = await sync_to_async(self.get_mapbox_client)()
 
+            
             # Optimize Database Queries
             available_riders = await self.get_available_riders(
                 gmaps, order_location, item_capacity, is_fragile

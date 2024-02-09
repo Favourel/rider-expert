@@ -17,7 +17,7 @@ from datetime import timedelta
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 LOG_FILE_PATH = os.path.join(BASE_DIR, "logs", "logfile.log")
-GOOGLE_MAPS_API_KEY = "AIzaSyASqmz9ihi9DHZT6KZAaQTsx56e8QnWooA"
+MAPBOX_API_KEY = "pk.eyJ1IjoiYWRhbXMwMDciLCJhIjoiY2xzY3diZHpjMGo5MTJrdGQ3amI4NjZzZiJ9.2fSKFubhpozY8-kDmFJeuw"
 
 
 # Quick-start development settings - unsuitable for production
@@ -46,7 +46,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt",
     "accounts",
     "orders",
-    "adrf"
+    "adrf",
 ]
 
 MIDDLEWARE = [
