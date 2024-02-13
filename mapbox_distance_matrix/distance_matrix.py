@@ -6,35 +6,35 @@ class MapboxDistanceDuration:
     def __init__(self, api_key):
         self.api_key = api_key
 
-    def get_distance_duration(self, origin, destinations_data):
+    def get_distance_duration(self, origin, riders_locations):
         """
-        Get distance and duration between origin and multiple destinations_data using Mapbox Matrix API.
+        Get distance and duration between origin and multiple riders_locations using Mapbox Matrix API.
 
         Args:
         - origin (str): Origin coordinates in the format 'longitude,latitude'.
-        - destinations_data (list of dict): List of dictionaries, each containing 'email' and 'destination' keys.
-                                    'destination' is a string in the format 'longitude,latitude'.
+        - riders_locations (list of dict): List of dictionaries, each containing 'email' and 'rider_location' keys.
+                                    'rider_location' is a string in the format 'longitude,latitude'.
 
         Returns:
         - List of dictionaries: List of dictionaries, each containing 'email', 'distance' (in meters), and
-                                'duration' (in seconds) for each destination.
+                                'duration' (in seconds) for each rider_location.
         """
-        if len(destinations_data) == 0:
+        if len(riders_locations) == 0:
             return []
 
-        # Maximum 10 destinations_data per request
+        # Maximum 10 riders_locations per request
         batch_size = 9
-        num_batches = (len(destinations_data) + batch_size - 1) // batch_size
+        num_batches = (len(riders_locations) + batch_size - 1) // batch_size
 
         results = []
 
         # Define the Mapbox Matrix API endpoint URL
         url_base = f"https://api.mapbox.com/directions-matrix/v1/mapbox/driving-traffic/{origin};"
 
-        if num_batches == 1 and len(destinations_data) == 1:
+        if num_batches == 1 and len(riders_locations) == 1:
             # Directly make a request without batching
-            destination = destinations_data[0]
-            destinations_str = destination["destination"]
+            rider_location = riders_locations[0]
+            destinations_str = rider_location["rider_location"]
             url = f"{url_base}{destinations_str}?access_token={self.api_key}"
             response = requests.get(url)
 
@@ -44,7 +44,7 @@ class MapboxDistanceDuration:
                 duration = data["durations"][1][0]
                 results.append(
                     {
-                        "email": destination["email"],
+                        "email": rider_location["email"],
                         "distance": distance,
                         "duration": duration,
                     }
@@ -54,12 +54,12 @@ class MapboxDistanceDuration:
         else:
             for i in range(num_batches):
                 start_idx = i * batch_size
-                end_idx = min((i + 1) * batch_size, len(destinations_data))
-                batch_destinations = destinations_data[start_idx:end_idx]
+                end_idx = min((i + 1) * batch_size, len(riders_locations))
+                batch_destinations = riders_locations[start_idx:end_idx]
 
-                # Convert destinations_data list to a semicolon-separated string
+                # Convert riders_locations list to a semicolon-separated string
                 destinations_str = ";".join(
-                    [destination["destination"] for destination in batch_destinations]
+                    [rider_location["rider_location"] for rider_location in batch_destinations]
                 )
 
                 # Make a GET request to the API
@@ -71,8 +71,8 @@ class MapboxDistanceDuration:
                     data = response.json()
 
                     # Extract distances and durations from the response
-                    for j, destination in enumerate(data["destinations"][1:], start=1):
-                        distance = destination["distance"]
+                    for j, rider_location in enumerate(data["destinations"][1:], start=1):
+                        distance = rider_location["distance"]
                         duration = data["durations"][j][0]
                         results.append(
                             {

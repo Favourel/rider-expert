@@ -35,27 +35,27 @@ class DistanceCalculator:
         distance = 6371 * c  # Earth radius in kilometers
         return distance
 
-    def destinations_within_radius(self, destinations_data, radius):
+    def destinations_within_radius(self, riders_locations, radius):
         """
-        Find destinations_data within a specified radius of the origin.
+        Find riders_locations within a specified radius of the origin.
 
         Parameters:
-        destinations_data: List of dictionaries, each containing 'email' and 'destination' keys.
-                    'destination' is a tuple containing latitude and longitude.
+        riders_locations: List of dictionaries, each containing 'email' and 'rider_location' keys.
+                    'rider_location' is a tuple containing latitude and longitude.
         radius: Radius in kilometers.
 
         Returns:
-        List of dictionaries for destinations_data within the specified radius of the origin.
+        List of dictionaries for riders_locations within the specified radius of the origin.
         """
         within_radius = []
-        for destination in destinations_data:
-            lat, lon = destination["destination"]
+        for rider_location in riders_locations:
+            lat, lon = rider_location["rider_location"]
             distance = self.haversine_distance(self.origin[0], self.origin[1], lat, lon)
             if distance <= radius:
                 within_radius.append(
                     {
-                        "email": destination["email"],
-                        "destination": "{},{}".format(lon, lat),
+                        "email": rider_location["email"],
+                        "rider_location": "{},{}".format(lon, lat),
                     }
                 )
         return within_radius
