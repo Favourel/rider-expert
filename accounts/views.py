@@ -347,7 +347,13 @@ class GetAvailableRidersView(AsyncAPIView):
                 .select("rider_email", "current_lat", "current_long")
                 .execute
             )()
-            return response
+            return [
+                {
+                    "email": rider["rider_email"],
+                    "location": (rider["current_lat"], rider["current_long"]),
+                }
+                for rider in response.data
+            ]
         except Exception as e:
             logger.error(f"Supabase API error: {str(e)}")
             return None

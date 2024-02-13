@@ -40,22 +40,22 @@ class DistanceCalculator:
         Find riders_locations within a specified radius of the origin.
 
         Parameters:
-        riders_locations: List of dictionaries, each containing 'email' and 'rider_location' keys.
-                    'rider_location' is a tuple containing latitude and longitude.
+        riders_locations: List of dictionaries, each containing 'email' and 'location' keys.
+                    'location' is a tuple containing latitude and longitude.
         radius: Radius in kilometers.
 
         Returns:
         List of dictionaries for riders_locations within the specified radius of the origin.
         """
         within_radius = []
-        for rider_location in riders_locations:
-            lat, lon = rider_location["rider_location"]
+        for location in riders_locations:
+            lat, lon = location["location"]
             distance = self.haversine_distance(self.origin[0], self.origin[1], lat, lon)
             if distance <= radius:
                 within_radius.append(
                     {
-                        "email": rider_location["email"],
-                        "rider_location": "{},{}".format(lon, lat),
+                        "email": location["email"],
+                        "location": "{},{}".format(lon, lat),
                     }
                 )
         return within_radius

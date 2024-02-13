@@ -12,12 +12,12 @@ class MapboxDistanceDuration:
 
         Args:
         - origin (str): Origin coordinates in the format 'longitude,latitude'.
-        - riders_locations (list of dict): List of dictionaries, each containing 'email' and 'rider_location' keys.
-                                    'rider_location' is a string in the format 'longitude,latitude'.
+        - riders_locations (list of dict): List of dictionaries, each containing 'email' and 'location' keys.
+                                    'location' is a string in the format 'longitude,latitude'.
 
         Returns:
         - List of dictionaries: List of dictionaries, each containing 'email', 'distance' (in meters), and
-                                'duration' (in seconds) for each rider_location.
+                                'duration' (in seconds) for each location.
         """
         if len(riders_locations) == 0:
             return []
@@ -34,7 +34,7 @@ class MapboxDistanceDuration:
         if num_batches == 1 and len(riders_locations) == 1:
             # Directly make a request without batching
             rider_location = riders_locations[0]
-            destinations_str = rider_location["rider_location"]
+            destinations_str = rider_location["location"]
             url = f"{url_base}{destinations_str}?access_token={self.api_key}"
             response = requests.get(url)
 
@@ -59,7 +59,7 @@ class MapboxDistanceDuration:
 
                 # Convert riders_locations list to a semicolon-separated string
                 destinations_str = ";".join(
-                    [rider_location["rider_location"] for rider_location in batch_destinations]
+                    [rider_location["location"] for rider_location in batch_destinations]
                 )
 
                 # Make a GET request to the API
@@ -71,8 +71,8 @@ class MapboxDistanceDuration:
                     data = response.json()
 
                     # Extract distances and durations from the response
-                    for j, rider_location in enumerate(data["destinations"][1:], start=1):
-                        distance = rider_location["distance"]
+                    for j, destination in enumerate(data["destinations"][1:], start=1):
+                        distance = destination["distance"]
                         duration = data["durations"][j][0]
                         results.append(
                             {
