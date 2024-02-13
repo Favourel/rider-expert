@@ -6,50 +6,61 @@ class MapboxDistanceDuration:
     def __init__(self, api_key):
         self.api_key = api_key
 
-    def get_distance_duration(self, origin, destinations):
+    def get_distance_duration(self, origin, destinations_data):
         """
-        Get distance and duration between origin and multiple destinations using Mapbox Matrix API.
+        Get distance and duration between origin and multiple destinations_data using Mapbox Matrix API.
 
         Args:
         - origin (str): Origin coordinates in the format 'longitude,latitude'.
-        - destinations (list of str): List of destination coordinates in the format 'longitude,latitude'.
+        - destinations_data (list of dict): List of dictionaries, each containing 'email' and 'destination' keys.
+                                    'destination' is a string in the format 'longitude,latitude'.
 
         Returns:
-        - List of tuples: List of (distance in meters, duration in seconds) for each destination.
+        - List of dictionaries: List of dictionaries, each containing 'email', 'distance' (in meters), and
+                                'duration' (in seconds) for each destination.
         """
-        if len(destinations) == 0:
+        if len(destinations_data) == 0:
             return []
 
-        # Maximum 10 destinations per request
+        # Maximum 10 destinations_data per request
         batch_size = 9
-        num_batches = (len(destinations) + batch_size - 1) // batch_size
+        num_batches = (len(destinations_data) + batch_size - 1) // batch_size
 
         results = []
 
         # Define the Mapbox Matrix API endpoint URL
         url_base = f"https://api.mapbox.com/directions-matrix/v1/mapbox/driving-traffic/{origin};"
 
-        if num_batches == 1 and len(destinations) == 1:
+        if num_batches == 1 and len(destinations_data) == 1:
             # Directly make a request without batching
-            destinations_str = destinations[0]
+            destination = destinations_data[0]
+            destinations_str = destination["destination"]
             url = f"{url_base}{destinations_str}?access_token={self.api_key}"
             response = requests.get(url)
 
             if response.status_code == 200:
                 data = response.json()
-                distance = data["destinations"][0]["distance"]
-                duration = data["durations"][0][0]
-                results.append((distance, duration))
+                distance = data["destinations"][1]["distance"]
+                duration = data["durations"][1][0]
+                results.append(
+                    {
+                        "email": destination["email"],
+                        "distance": distance,
+                        "duration": duration,
+                    }
+                )
             else:
                 print("Error:", response.text)
         else:
             for i in range(num_batches):
                 start_idx = i * batch_size
-                end_idx = min((i + 1) * batch_size, len(destinations))
-                batch_destinations = destinations[start_idx:end_idx]
+                end_idx = min((i + 1) * batch_size, len(destinations_data))
+                batch_destinations = destinations_data[start_idx:end_idx]
 
-                # Convert destinations list to a semicolon-separated string
-                destinations_str = ";".join(batch_destinations)
+                # Convert destinations_data list to a semicolon-separated string
+                destinations_str = ";".join(
+                    [destination["destination"] for destination in batch_destinations]
+                )
 
                 # Make a GET request to the API
                 url = f"{url_base}{destinations_str}?access_token={self.api_key}"
@@ -60,10 +71,17 @@ class MapboxDistanceDuration:
                     data = response.json()
 
                     # Extract distances and durations from the response
-                    for j, destination in enumerate(data["destinations"]):
+                    for j, destination in enumerate(data["destinations"][1:], start=1):
                         distance = destination["distance"]
-                        duration = data["durations"][0][j]
-                        results.append((distance, duration))
+                        duration = data["durations"][j][0]
+                        results.append(
+                            {
+                                "email": batch_destinations[j - 1]["email"],
+                                "distance": distance,
+                                "duration": duration,
+                            }
+                        )
+
                 else:
                     print("Error:", response.text)
 
@@ -72,21 +90,3 @@ class MapboxDistanceDuration:
                     time.sleep(6)
 
         return results
-
-
-# Example usage:
-# origin = "-122.42,37.78"  # San Francisco, CA
-# destinations = [
-#     "-122.41,37.79",
-#     "-122.40,37.80",
-#     "-122.39,37.81",
-# ]
-
-
-# results = get_distance_duration(origin, destinations, api_key)
-# print(results)
-# if results is not None:
-#     for i, (distance, duration) in enumerate(results):
-#         print(f"Destination {i + 1}:")
-#         print(f"Distance: {distance} meters")
-#         print(f"Duration: {duration} seconds")

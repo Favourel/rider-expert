@@ -1,6 +1,5 @@
 from asgiref.sync import sync_to_async
 from django.db import transaction
-from django.core.exceptions import ObjectDoesNotExist
 from django.contrib.auth import authenticate
 from django.utils import timezone
 from .tokens import create_jwt_pair_for_user
@@ -11,23 +10,23 @@ from rest_framework.response import Response
 from rest_framework import generics, status
 from .serializers import *
 from .models import *
-from .utils import send_verification_email, str_to_bool
+from .utils import (
+    DistanceCalculator,
+    send_verification_email,
+    str_to_bool,
+)
 from django.conf import settings
 from mapbox_distance_matrix.distance_matrix import MapboxDistanceDuration
-from google.cloud import firestore
-from googlemaps.exceptions import ApiError
-import firebase_admin
-from firebase_admin import credentials, messaging
-import datetime
-
 import logging
+from supabase import create_client, Client
 
 logger = logging.getLogger(__name__)
 
-riderexpert_db = firestore.AsyncClient(project="riderexpert", database="riderexpert-db")
+url: str = settings.SUPABASE_URL
+key: str = settings.SUPABASE_KEY
+supabase: Client = create_client(url, key)
 
-cred = credentials.Certificate("riderexpert-firebase-adminsdk-8eiae-55c277d9ed.json")
-riderexpert_app = firebase_admin.initialize_app(cred)
+table_name = "riders"
 
 
 class BaseRegistrationView(generics.CreateAPIView):
@@ -213,51 +212,73 @@ class UserPasswordResetView(APIView):
         otp_code = request.data.get("otp_code")
 
         if not new_password:
-            return Response({'detail': 'New Password is required'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "New Password is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         if not otp_code:
-            return Response({'detail': 'OTP is required'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "OTP is required"}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         try:
             user_verification = UserVerification.objects.get(
-                user__email=email, email_otp=otp_code)
+                user__email=email, email_otp=otp_code
+            )
         except UserVerification.DoesNotExist:
-            return Response({'detail': 'User not found or verification record missing'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "User not found or verification record missing"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         if user_verification.expired:
-            return Response({'detail': 'OTP has expired, request new OTP'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "OTP has expired, request new OTP"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         if new_password != confirm_password:
-            return Response({'detail': 'New password and confirm password do not match'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "New password and confirm password do not match"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         user = user_verification.user
         user.set_password(new_password)
         user.save()
 
-        return Response({'detail': 'Password reset successfully'}, status=status.HTTP_200_OK)
+        return Response(
+            {"detail": "Password reset successfully"}, status=status.HTTP_200_OK
+        )
 
 
 class GetAvailableRidersView(AsyncAPIView):
     permission_classes = [IsAuthenticated]
-    SEARCH_RADIUS_METERS = 10
+    SEARCH_RADIUS_KM = 10
 
-    def get_mapbox_client(self):
+    async def get_mapbox_client(self):
         """Initialize and return the asynchronous Mapbox API client."""
         return MapboxDistanceDuration(api_key=settings.MAPBOX_API_KEY)
 
-    async def validate_parameters(self, order_location, item_capacity, is_fragile):
+    async def validate_parameters(
+        self, origin_lat, origin_long, item_capacity, is_fragile
+    ):
         """Validate input parameters."""
         try:
+            origin_lat = float(origin_lat)
+            origin_long = float(origin_long)
             item_capacity = float(item_capacity)
             is_fragile = str_to_bool(is_fragile)
-        except (ValueError, TypeError):
+        except ValueError:
             return False, "Invalid or missing parameters"
 
         if not all(
             [
-                order_location is not None and isinstance(order_location, str),
-                item_capacity is not None and isinstance(item_capacity, (int, float)),
-                is_fragile is not None and isinstance(is_fragile, bool),
+                isinstance(origin_lat, float),
+                isinstance(origin_long, float),
+                isinstance(item_capacity, (int, float)),
+                isinstance(is_fragile, bool),
             ]
         ):
             return False, "Invalid or missing parameters"
@@ -266,194 +287,67 @@ class GetAvailableRidersView(AsyncAPIView):
     def handle_mapbox_api_error(self, e):
         """Handle Mapbox API errors."""
         return Response(
-            {"status": "error", "message": f"Google Maps API error: {str(e)}"},
+            {"status": "error", "message": f"Mapbox API error: {str(e)}"},
             status=400,
         )
 
-    def handle_internal_error(self, e):
-        """Handle internal server errors."""
-        logger.error(str(e))
-        raise Exception(str(e))
-
     async def get(self, request, *args, **kwargs):
-        order_location = request.GET.get("origin")
+        origin_long = request.GET.get("origin_long")
+        origin_lat = request.GET.get("origin_lat")
         item_capacity = request.GET.get("item_capacity")
         is_fragile = request.GET.get("is_fragile")
-        order_destination = request.GET.get("destination")
 
         # Handle Missing or Invalid Parameters
         is_valid, validation_message = await self.validate_parameters(
-            order_location, item_capacity, is_fragile
+            origin_lat, origin_long, item_capacity, is_fragile
         )
         if not is_valid:
             return Response(
                 {"status": "error", "message": validation_message}, status=400
             )
 
-        try:
-            # Initialize asynchronous Google Maps API client
-            mapbox = await sync_to_async(self.get_mapbox_client)()
+        origin = (origin_lat, origin_long)
+        riders_location_data = await self.get_supabase_rider()
 
-            
-            # Optimize Database Queries
-            available_riders = await self.get_available_riders(
-                gmaps, order_location, item_capacity, is_fragile
+        serialized_riders_data = []
+        if riders_location_data and origin:
+            calculator = DistanceCalculator(origin)
+            location_within_radius = calculator.destinations_within_radius(
+                riders_location_data, self.SEARCH_RADIUS_KM
             )
-
-            # Extract FCM tokens and send notifications
-            await self.send_fcm_notifications(
-                available_riders, order_location, order_destination, is_fragile
-            )
-
-            return Response(status=status.HTTP_201_CREATED)
-        except ApiError as e:
-            logger.error(f"Google Maps API error: {str(e)}")
-            return self.handle_google_maps_api_error(e)
-        except Exception as e:
-            return self.handle_internal_error(e)
-
-    async def get_available_riders(
-        self, gmaps, order_location, item_capacity, is_fragile
-    ):
-        try:
-            riders_collection = riderexpert_db.collection("riders").stream()
-
-            rider_locations = []
-
-            # Prepare a list of rider locations and emails
-            emails = []
-            async for firestore_rider in riders_collection:
-                firestore_data = firestore_rider.to_dict()
-                email = firestore_data.get("email")
-                emails.append(email)
-                rider_location = (
-                    firestore_data.get("current_latitude"),
-                    firestore_data.get("current_longitude"),
-                )
-                rider_locations.append(rider_location)
-
-            # Fetch all riders in a single query
-            riders = await sync_to_async(Rider.objects.filter)(
-                user__email__in=emails,
-                fragile_item_allowed=is_fragile,
-                min_capacity__lte=item_capacity,
-                max_capacity__gte=item_capacity,
-            )
-
-            batch_size = 20
-
-            # Fetch all riders in batches only if the total number of riders is greater than batch_size
-            if len(rider_locations) > batch_size:
-                riders_within_radius = await self.fetch_riders_in_batches(
-                    gmaps, order_location, rider_locations, batch_size, riders
-                )
-            else:
-                riders_within_radius = await self.fetch_all_riders(
-                    gmaps, order_location, rider_locations, riders
+            mapbox = await self.get_mapbox_client()
+            mapbox_origin = f"{origin_long},{origin_lat}"
+            try:
+                results = await mapbox.get_distance_duration(
+                    mapbox_origin, location_within_radius
                 )
 
-            return riders_within_radius
+                for result in results:
+                    rider = await sync_to_async(Rider.objects.filter)(
+                        user__email=result["email"],
+                        fragile_item_allowed=is_fragile,
+                        min_capacity__lte=item_capacity,
+                        max_capacity__gte=item_capacity,
+                    ).all()
+                    rider_data = RiderSerializer(rider, many=True).data
+                    rider_data["distance"] = result["distance"]
+                    rider_data["duration"] = result["duration"]
+                    serialized_riders_data.append(rider_data)
 
-        except ApiError as e:
-            return self.handle_google_maps_api_error(e)
+            except Exception as e:
+                return self.handle_mapbox_api_error(e)
 
-    async def fetch_riders_in_batches(
-        self, gmaps, order_location, rider_locations, batch_size, riders
-    ):
-        riders_within_radius = []
+        return Response({"status": "success", "riders": serialized_riders_data})
 
-        for i in range(0, len(rider_locations), batch_size):
-            batch_destinations = rider_locations[i : i + batch_size]
-            riders_within_radius += await self.process_distance_matrix_result(
-                gmaps, order_location, batch_destinations, riders
-            )
-
-        return riders_within_radius
-
-    async def fetch_all_riders(self, gmaps, order_location, rider_locations, riders):
-        return await self.process_distance_matrix_result(
-            gmaps, order_location, rider_locations, riders
-        )
-
-    async def process_distance_matrix_result(
-        self, gmaps, order_location, destinations, riders
-    ):
-        riders_within_radius = []
-
+    async def get_supabase_rider(self):
+        # Fetch all riders locations
         try:
-            distance_matrix_result = await sync_to_async(gmaps.distance_matrix)(
-                origins=order_location,
-                destinations=destinations,
-                mode="driving",
-                units="metric",
-            )
+            response = await sync_to_async(
+                supabase.table(table_name)
+                .select("rider_email", "current_lat", "current_long")
+                .execute
+            )()
+            return response
         except Exception as e:
-            raise Exception(str(e))
-
-        # Iterate over the response and filter out riders within the desired radius
-        for i, distance_row in enumerate(distance_matrix_result["rows"]):
-            for element in distance_row["elements"]:
-                duration = element["duration"]["text"]
-                distance = element["distance"]
-
-                if distance["value"] <= self.SEARCH_RADIUS_METERS * 1000:
-                    # Include both distance and duration in the response
-                    rider_data = {
-                        "rider": await sync_to_async(self.getRiderSerializer)(
-                            await sync_to_async(lambda i: riders[i])(i)
-                        ),
-                        "distance": distance,
-                        "duration": duration,
-                    }
-                    riders_within_radius.append(rider_data)
-
-        # Sort the riders_within_radius list based on distance
-        riders_within_radius.sort(key=lambda x: x["distance"]["value"])
-
-        return riders_within_radius
-
-    def getRiderSerializer(self, django_rider):
-        return RiderSerializer(django_rider).data
-
-    async def send_fcm_notifications(
-        self, riders_within_radius, order_location, is_fragile
-    ):
-        # Extract all rider emails
-        rider_emails = [
-            rider_data["rider"]["user"]["email"] for rider_data in riders_within_radius
-        ]
-
-        # Fetch all FCM tokens for the given rider emails
-        rider_tokens = await self.get_fcm_tokens_by_emails(rider_emails)
-
-        # Construct FCM message
-        message_data = {
-            "order_location": order_location,
-            "is_fragile": str(is_fragile),
-            # Add any other relevant data to the message
-        }
-
-        # Send multicast FCM message
-        message = messaging.MulticastMessage(data=message_data, tokens=rider_tokens)
-        try:
-            await sync_to_async(messaging.send_multicast)(message)
-        except Exception as e:
-            # Handle FCM sending error
-            logger.error(f"FCM sending error: {str(e)}")
-
-    async def get_fcm_tokens_by_emails(self, rider_emails):
-        # Fetch FCM tokens from Firestore for multiple rider emails
-        rider_tokens = []
-
-        # Create a Firestore query for all riders with the specified emails
-        riders_query = riderexpert_db.collection("riders").where(
-            "email", "in", rider_emails
-        )
-
-        # Execute the query
-        async for rider_snapshot in sync_to_async(riders_query.stream)():
-            rider_data = rider_snapshot.to_dict()
-            fcm_token = rider_data.get("fcm_token")
-            rider_tokens.append(fcm_token)
-
-        return rider_tokens
+            logger.error(f"Supabase API error: {str(e)}")
+            return None

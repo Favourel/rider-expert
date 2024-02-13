@@ -18,6 +18,8 @@ from datetime import timedelta
 BASE_DIR = Path(__file__).resolve().parent.parent
 LOG_FILE_PATH = os.path.join(BASE_DIR, "logs", "logfile.log")
 MAPBOX_API_KEY = "pk.eyJ1IjoiYWRhbXMwMDciLCJhIjoiY2xzY3diZHpjMGo5MTJrdGQ3amI4NjZzZiJ9.2fSKFubhpozY8-kDmFJeuw"
+SUPABASE_URL = "https://qxplgfcshxuenfzrfjwi.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF4cGxnZmNzaHh1ZW5menJmandpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDczNzg5NDYsImV4cCI6MjAyMjk1NDk0Nn0.FaC6oKiZ7qVLcOp6c8MLyomNJD4Cfxr22F9I6qVW5f8"
 
 
 # Quick-start development settings - unsuitable for production
