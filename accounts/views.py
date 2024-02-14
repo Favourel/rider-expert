@@ -253,17 +253,15 @@ class UserPasswordResetView(APIView):
         )
 
 
-class GetAvailableRidersView(AsyncAPIView):
+class GetAvailableRidersView(APIView):
     permission_classes = [IsAuthenticated]
     SEARCH_RADIUS_KM = 10
 
-    async def get_mapbox_client(self):
+    def get_mapbox_client(self):
         """Initialize and return the asynchronous Mapbox API client."""
         return MapboxDistanceDuration(api_key=settings.MAPBOX_API_KEY)
 
-    async def validate_parameters(
-        self, origin_lat, origin_long, item_capacity, is_fragile
-    ):
+    def validate_parameters(self, origin_lat, origin_long, item_capacity, is_fragile):
         """Validate input parameters."""
         try:
             origin_lat = float(origin_lat)
@@ -291,14 +289,14 @@ class GetAvailableRidersView(AsyncAPIView):
             status=400,
         )
 
-    async def get(self, request, *args, **kwargs):
-        origin_long = request.GET.get("origin_long")
-        origin_lat = request.GET.get("origin_lat")
+    def get(self, request, *args, **kwargs):
+        origin_long = float(request.GET.get("origin_long"))
+        origin_lat = float(request.GET.get("origin_lat"))
         item_capacity = request.GET.get("item_capacity")
         is_fragile = request.GET.get("is_fragile")
 
         # Handle Missing or Invalid Parameters
-        is_valid, validation_message = await self.validate_parameters(
+        is_valid, validation_message = self.validate_parameters(
             origin_lat, origin_long, item_capacity, is_fragile
         )
         if not is_valid:
@@ -307,7 +305,7 @@ class GetAvailableRidersView(AsyncAPIView):
             )
 
         origin = (origin_lat, origin_long)
-        riders_location_data = await self.get_supabase_rider()
+        riders_location_data = self.get_supabase_rider()
 
         serialized_riders_data = []
         if riders_location_data and origin:
@@ -315,38 +313,45 @@ class GetAvailableRidersView(AsyncAPIView):
             location_within_radius = calculator.destinations_within_radius(
                 riders_location_data, self.SEARCH_RADIUS_KM
             )
-            mapbox = await self.get_mapbox_client()
+            mapbox = self.get_mapbox_client()
             mapbox_origin = f"{origin_long},{origin_lat}"
             try:
-                results = await mapbox.get_distance_duration(
+                results = mapbox.get_distance_duration(
                     mapbox_origin, location_within_radius
                 )
 
                 for result in results:
-                    rider = await sync_to_async(Rider.objects.filter)(
+                    rider = Rider.objects.filter(
                         user__email=result["email"],
                         fragile_item_allowed=is_fragile,
                         min_capacity__lte=item_capacity,
                         max_capacity__gte=item_capacity,
-                    ).all()
-                    rider_data = RiderSerializer(rider, many=True).data
-                    rider_data["distance"] = result["distance"]
-                    rider_data["duration"] = result["duration"]
-                    serialized_riders_data.append(rider_data)
+                    ).first()
+                    if rider:
+                        rider_data = {
+                            "rider": RiderSerializer(rider).data,
+                            "distance": result["distance"],
+                            "duration": result["duration"],
+                        }
+
+                        # rider_data = RiderSerializer(rider).data
+                        # rider_data["distance"] = result["distance"]
+                        # rider_data["duration"] = result["duration"]
+                        serialized_riders_data.append(rider_data)
 
             except Exception as e:
                 return self.handle_mapbox_api_error(e)
 
         return Response({"status": "success", "riders": serialized_riders_data})
 
-    async def get_supabase_rider(self):
+    def get_supabase_rider(self):
         # Fetch all riders locations
         try:
-            response = await sync_to_async(
+            response = (
                 supabase.table(table_name)
                 .select("rider_email", "current_lat", "current_long")
-                .execute
-            )()
+                .execute()
+            )
             return [
                 {
                     "email": rider["rider_email"],

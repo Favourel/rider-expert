@@ -84,8 +84,6 @@ class RiderSerializer(serializers.ModelSerializer):
     charge_per_mile = serializers.DecimalField(
         max_digits=6, decimal_places=2, required=False, allow_null=True
     )
-    distance = serializers.FloatField()
-    duration = serializers.FloatField()
 
     class Meta:
         model = Rider
@@ -104,8 +102,6 @@ class RiderSerializer(serializers.ModelSerializer):
             "fragile_item_allowed",
             "ratings",
             "charge_per_mile",
-            "distance",
-            "duration",
         )
 
     def validate(self, data):
