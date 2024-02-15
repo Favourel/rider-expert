@@ -325,20 +325,6 @@ class GetAvailableRidersView(APIView):
 
                 self.send_riders_notification(results)
 
-                # rider = Rider.objects.filter(
-                #     user__email=result["email"],
-                #     fragile_item_allowed=is_fragile,
-                #     min_capacity__lte=item_capacity,
-                #     max_capacity__gte=item_capacity,
-                # ).first()
-                # if rider:
-                #     rider_data = {
-                #         "rider": RiderSerializer(rider).data,
-                #         "distance": result["distance"],
-                #         "duration": result["duration"],
-                #     }
-                #     serialized_riders_data.append(rider_data)
-
             except Exception as e:
                 return self.handle_mapbox_api_error(e)
 
