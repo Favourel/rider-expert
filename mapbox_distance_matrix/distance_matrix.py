@@ -107,8 +107,8 @@ class MapboxDistanceDuration:
         - str: The formatted duration string.
         """
         # Convert duration from seconds to minutes and seconds
-        duration_minutes = duration // 60
-        duration_seconds = duration % 60
+        duration_minutes = int(duration // 60)
+        duration_seconds = int(duration % 60)
 
         # Check if duration is less than or equal to 60 seconds
         if duration <= 60:
@@ -116,6 +116,8 @@ class MapboxDistanceDuration:
         elif duration_seconds == 0:
             duration_formatted = f"{duration_minutes} minutes"
         else:
-            duration_formatted = f"{duration_minutes} mins {duration_seconds} secs"
+            duration_formatted = (
+                f"{duration_minutes} mins {duration_seconds} secs"
+            )
 
         return duration_formatted

@@ -374,12 +374,10 @@ class GetAvailableRidersView(APIView):
                 if rider_email and distance is not None and duration is not None:
                     message = f"New Delivery Request: Order is {distance} m and {duration} away"
                     # Insert message into the broadcast_message column of the riders table
-                    data, count = (
-                        supabase.table(riders_table)
-                        .upsert({"broadcast_message": message})
-                        .eq("rider_email", rider_email)
-                        .execute()
-                    )
+                    supabase.table(riders_table).update(
+                        {"broadcast_message": message}
+                    ).eq("rider_email", rider_email).execute()
+
                 else:
                     logger.warning(
                         "Invalid rider data: email, distance, or duration missing."
@@ -390,11 +388,8 @@ class GetAvailableRidersView(APIView):
     def send_customer_notification(self, customer, message):
         try:
             # Insert message into the notification column of the customers table
-            data, count = (
-                supabase.table(customers_table)
-                .upsert({"notification": message})
-                .eq("email", customer)
-                .execute()
-            )
+            supabase.table(customers_table).update({"notification": message}).eq(
+                "email", customer
+            ).execute()
         except Exception as e:
             logger.error(f"Supabase API error: {str(e)}")
