@@ -17,7 +17,7 @@ class MapboxDistanceDuration:
 
         Returns:
         - List of dictionaries: List of dictionaries, each containing 'email', 'distance' (in meters), and
-                                'duration' (in seconds) for each location.
+                                'duration' (in minutes) for each location.
         """
         if len(riders_locations) == 0:
             return []
@@ -42,11 +42,12 @@ class MapboxDistanceDuration:
                 data = response.json()
                 distance = data["destinations"][1]["distance"]
                 duration = data["durations"][1][0]
+                formatted_duration = self.format_duration(duration)
                 results.append(
                     {
                         "email": rider_location["email"],
                         "distance": distance,
-                        "duration": duration,
+                        "duration": formatted_duration,
                     }
                 )
             else:
@@ -59,7 +60,10 @@ class MapboxDistanceDuration:
 
                 # Convert riders_locations list to a semicolon-separated string
                 destinations_str = ";".join(
-                    [rider_location["location"] for rider_location in batch_destinations]
+                    [
+                        rider_location["location"]
+                        for rider_location in batch_destinations
+                    ]
                 )
 
                 # Make a GET request to the API
@@ -74,11 +78,12 @@ class MapboxDistanceDuration:
                     for j, destination in enumerate(data["destinations"][1:], start=1):
                         distance = destination["distance"]
                         duration = data["durations"][j][0]
+                        formatted_duration = self.format_duration(duration)
                         results.append(
                             {
                                 "email": batch_destinations[j - 1]["email"],
                                 "distance": distance,
-                                "duration": duration,
+                                "duration": formatted_duration,
                             }
                         )
 
@@ -90,3 +95,27 @@ class MapboxDistanceDuration:
                     time.sleep(6)
 
         return results
+
+    def format_duration(self, duration: int) -> str:
+        """
+        Format a duration in seconds into a human-readable format.
+
+        Parameters:
+        - duration (int): The duration in seconds.
+
+        Returns:
+        - str: The formatted duration string.
+        """
+        # Convert duration from seconds to minutes and seconds
+        duration_minutes = duration // 60
+        duration_seconds = duration % 60
+
+        # Check if duration is less than or equal to 60 seconds
+        if duration <= 60:
+            duration_formatted = f"{duration} secs"
+        elif duration_seconds == 0:
+            duration_formatted = f"{duration_minutes} minutes"
+        else:
+            duration_formatted = f"{duration_minutes} mins {duration_seconds} secs"
+
+        return duration_formatted

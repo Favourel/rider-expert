@@ -6,7 +6,6 @@ services:
     command: sh -c "python manage.py runserver 0.0.0.0:8000"
     volumes:
       - "./:/app"
-      - "/Users/mac/.config/gcloud:/app/.config/gcloud"
     env_file:
       - .env
     ports:
@@ -20,8 +19,6 @@ services:
       - DJANGO_DB_NAME=riderexpert
       - DJANGO_DB_USER=riderexpert
       - DJANGO_DB_PASSWORD=testdatabase
-      - GOOGLE_APPLICATION_CREDENTIALS=/app/.config/gcloud/application_default_credentials.json
-      # Assuming the credentials file is in /app/.config/gcloud
 
   db:
     image: postgres:latest

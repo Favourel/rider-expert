@@ -1,9 +1,7 @@
-from asgiref.sync import sync_to_async
 from django.db import transaction
 from django.contrib.auth import authenticate
 from django.utils import timezone
 from .tokens import create_jwt_pair_for_user
-from adrf.views import APIView as AsyncAPIView
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -26,7 +24,8 @@ url: str = settings.SUPABASE_URL
 key: str = settings.SUPABASE_KEY
 supabase: Client = create_client(url, key)
 
-table_name = "riders"
+riders_table = "riders"
+customers_table = "customers"
 
 
 class BaseRegistrationView(generics.CreateAPIView):
@@ -255,7 +254,7 @@ class UserPasswordResetView(APIView):
 
 class GetAvailableRidersView(APIView):
     permission_classes = [IsAuthenticated]
-    SEARCH_RADIUS_KM = 10
+    SEARCH_RADIUS_KM = 5
 
     def get_mapbox_client(self):
         """Initialize and return the asynchronous Mapbox API client."""
@@ -294,6 +293,7 @@ class GetAvailableRidersView(APIView):
         origin_lat = float(request.GET.get("origin_lat"))
         item_capacity = request.GET.get("item_capacity")
         is_fragile = request.GET.get("is_fragile")
+        customer_email = request.GET.get("customer_email")
 
         # Handle Missing or Invalid Parameters
         is_valid, validation_message = self.validate_parameters(
@@ -307,7 +307,6 @@ class GetAvailableRidersView(APIView):
         origin = (origin_lat, origin_long)
         riders_location_data = self.get_supabase_rider()
 
-        serialized_riders_data = []
         if riders_location_data and origin:
             calculator = DistanceCalculator(origin)
             location_within_radius = calculator.destinations_within_radius(
@@ -320,35 +319,38 @@ class GetAvailableRidersView(APIView):
                     mapbox_origin, location_within_radius
                 )
 
-                for result in results:
-                    rider = Rider.objects.filter(
-                        user__email=result["email"],
-                        fragile_item_allowed=is_fragile,
-                        min_capacity__lte=item_capacity,
-                        max_capacity__gte=item_capacity,
-                    ).first()
-                    if rider:
-                        rider_data = {
-                            "rider": RiderSerializer(rider).data,
-                            "distance": result["distance"],
-                            "duration": result["duration"],
-                        }
+                self.send_customer_notification(
+                    customer=customer_email, message="Notifying riders close to you"
+                )
 
-                        # rider_data = RiderSerializer(rider).data
-                        # rider_data["distance"] = result["distance"]
-                        # rider_data["duration"] = result["duration"]
-                        serialized_riders_data.append(rider_data)
+                self.send_riders_notification(results)
+
+                # rider = Rider.objects.filter(
+                #     user__email=result["email"],
+                #     fragile_item_allowed=is_fragile,
+                #     min_capacity__lte=item_capacity,
+                #     max_capacity__gte=item_capacity,
+                # ).first()
+                # if rider:
+                #     rider_data = {
+                #         "rider": RiderSerializer(rider).data,
+                #         "distance": result["distance"],
+                #         "duration": result["duration"],
+                #     }
+                #     serialized_riders_data.append(rider_data)
 
             except Exception as e:
                 return self.handle_mapbox_api_error(e)
 
-        return Response({"status": "success", "riders": serialized_riders_data})
+        return Response(
+            {"status": "success", "message": "Notification sent successfully"}
+        )
 
     def get_supabase_rider(self):
         # Fetch all riders locations
         try:
             response = (
-                supabase.table(table_name)
+                supabase.table(riders_table)
                 .select("rider_email", "current_lat", "current_long")
                 .execute()
             )
@@ -362,3 +364,37 @@ class GetAvailableRidersView(APIView):
         except Exception as e:
             logger.error(f"Supabase API error: {str(e)}")
             return None
+
+    def send_riders_notification(self, riders):
+        try:
+            for rider in riders:
+                rider_email = rider.get("email")
+                distance = rider.get("distance")
+                duration = rider.get("duration")
+                if rider_email and distance is not None and duration is not None:
+                    message = f"New Delivery Request: Order is {distance} m and {duration} away"
+                    # Insert message into the broadcast_message column of the riders table
+                    data, count = (
+                        supabase.table(riders_table)
+                        .upsert({"broadcast_message": message})
+                        .eq("rider_email", rider_email)
+                        .execute()
+                    )
+                else:
+                    logger.warning(
+                        "Invalid rider data: email, distance, or duration missing."
+                    )
+        except Exception as e:
+            logger.error(f"Supabase API error: {str(e)}")
+
+    def send_customer_notification(self, customer, message):
+        try:
+            # Insert message into the notification column of the customers table
+            data, count = (
+                supabase.table(customers_table)
+                .upsert({"notification": message})
+                .eq("email", customer)
+                .execute()
+            )
+        except Exception as e:
+            logger.error(f"Supabase API error: {str(e)}")
