@@ -6,6 +6,11 @@ import pyotp
 from django.conf import settings
 from .models import UserVerification
 from math import radians, sin, cos, sqrt, atan2
+import logging
+from functools import wraps
+import time
+
+logger = logging.getLogger(__name__)
 
 
 class DistanceCalculator:
@@ -59,6 +64,39 @@ class DistanceCalculator:
                     }
                 )
         return within_radius
+
+
+def retry(ExceptionToCheck, tries=3, delay=1, backoff=2, logger=None):
+    """
+    Retry decorator with exponential backoff.
+    :param ExceptionToCheck: the exception to check. may be a tuple of exceptions to check
+    :param tries: number of times to try (not retry) before giving up
+    :param delay: initial delay between retries in seconds
+    :param backoff: backoff multiplier e.g. value of 2 will double the delay each retry
+    :param logger: logger to use. If None, print
+    """
+
+    def deco_retry(f):
+        @wraps(f)
+        def f_retry(*args, **kwargs):
+            mtries, mdelay = tries, delay
+            while mtries > 1:
+                try:
+                    return f(*args, **kwargs)
+                except ExceptionToCheck as e:
+                    msg = f"{str(e)}, Retrying in {mdelay} seconds..."
+                    if logger:
+                        logger.warning(msg)
+                    else:
+                        print(msg)
+                    time.sleep(mdelay)
+                    mtries -= 1
+                    mdelay *= backoff
+            return f(*args, **kwargs)
+
+        return f_retry  # true decorator
+
+    return deco_retry
 
 
 def generate_otp():

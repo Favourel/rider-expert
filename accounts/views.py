@@ -1,4 +1,3 @@
-import string
 from django.db import transaction
 from django.contrib.auth import authenticate
 from django.utils import timezone
@@ -12,6 +11,7 @@ from .serializers import *
 from .models import *
 from .utils import (
     DistanceCalculator,
+    retry,
     send_verification_email,
     str_to_bool,
 )
@@ -260,10 +260,14 @@ class GetAvailableRidersView(APIView):
 
     def get_matrix_client(self, client):
         """Initialize and return the Matrix API client."""
-        if client == "mapbox":
-            return MapboxDistanceDuration(api_key=settings.MAPBOX_API_KEY)
-        elif client == "tomtom":
-            return TomTomDistanceMatrix(api_key=settings.TOMTOM_API_KEY)
+        api_key = (
+            settings.MAPBOX_API_KEY if client == "mapbox" else settings.TOMTOM_API_KEY
+        )
+        return (
+            MapboxDistanceDuration(api_key)
+            if client == "mapbox"
+            else TomTomDistanceMatrix(api_key)
+        )
 
     def validate_parameters(
         self, origin_lat, origin_long, item_capacity, is_fragile, customer_email
@@ -277,13 +281,13 @@ class GetAvailableRidersView(APIView):
         except ValueError:
             return False, "Invalid or missing parameters"
 
-        if not all(
-            [
-                isinstance(origin_lat, float),
-                isinstance(origin_long, float),
-                isinstance(item_capacity, (int, float)),
-                isinstance(is_fragile, bool),
-            ]
+        if (
+            not all(
+                isinstance(param, (float, int))
+                for param in [origin_lat, origin_long, item_capacity]
+            )
+            or not isinstance(is_fragile, bool)
+            or not isinstance(customer_email, str)
         ):
             return False, "Invalid or missing parameters"
         return True, ""
@@ -291,9 +295,16 @@ class GetAvailableRidersView(APIView):
     def handle_matrix_api_error(self, e):
         """Handle Matrix API errors."""
         return Response(
-            {"status": "error", "message": f"Matrix API error: {str(e)}"},
-            status=400,
+            {"status": "error", "message": f"Matrix API error: {str(e)}"}, status=400
         )
+
+    @retry(Exception, tries=3, delay=1, backoff=2, logger=logger)
+    def call_matrix_api(self, origin, destinations, client, method_name):
+        """Call Matrix API with retry logic."""
+        matrix_client = self.get_matrix_client(client)
+        matrix_origin = f"{origin[1]},{origin[0]}"
+        method_to_call = getattr(matrix_client, method_name)
+        return method_to_call(matrix_origin, destinations)
 
     def get(self, request, *args, **kwargs):
         origin_long = float(request.GET.get("origin_long"))
@@ -302,7 +313,6 @@ class GetAvailableRidersView(APIView):
         is_fragile = request.GET.get("is_fragile")
         customer_email = request.GET.get("customer_email")
 
-        # Handle Missing or Invalid Parameters
         is_valid, validation_message = self.validate_parameters(
             origin_lat, origin_long, item_capacity, is_fragile, customer_email
         )
@@ -319,25 +329,34 @@ class GetAvailableRidersView(APIView):
             location_within_radius = calculator.destinations_within_radius(
                 riders_location_data, self.SEARCH_RADIUS_KM
             )
-            mapbox = self.get_matrix_client(client="mapbox")
-            tomtom = self.get_matrix_client(client="tomtom")
-            matrix_origin = f"{origin_long},{origin_lat}"
             try:
-                # results = mapbox.get_distance_duration(
-                #     matrix_origin, location_within_radius
-                # )
-                results = tomtom.get_async_response(
-                    matrix_origin, location_within_radius
+                results = self.call_matrix_api(
+                    origin,
+                    location_within_radius,
+                    client="tomtom",
+                    method_name="get_async_response",
                 )
-
                 self.send_customer_notification(
                     customer=customer_email, message="Notifying riders close to you"
                 )
-
                 self.send_riders_notification(results)
-
             except Exception as e:
-                return self.handle_matrix_api_error(e)
+                logger.error(f"Error processing API request: {str(e)}")
+                try:
+                    # Fallback mechanism: Use Mapbox API as an alternative
+                    results = self.call_matrix_api(
+                        origin,
+                        location_within_radius,
+                        client="mapbox",
+                        method_name="get_distance_duration",
+                    )
+                    self.send_customer_notification(
+                        customer=customer_email, message="Notifying riders close to you"
+                    )
+                    self.send_riders_notification(results)
+                except Exception as e:
+                    logger.error(f"Error in Mapbox API call: {str(e)}")
+                    return self.handle_matrix_api_error(e)
 
         return Response(
             {"status": "success", "message": "Notification sent successfully"}
@@ -360,7 +379,7 @@ class GetAvailableRidersView(APIView):
             ]
         except Exception as e:
             logger.error(f"Supabase API error: {str(e)}")
-            return None
+            return
 
     def send_riders_notification(self, riders):
         try:
@@ -368,13 +387,11 @@ class GetAvailableRidersView(APIView):
                 rider_email = rider.get("email")
                 distance = rider.get("distance")
                 duration = rider.get("duration")
-                if rider_email and distance is not None and duration is not None:
+                if all([rider_email, distance is not None, duration is not None]):
                     message = f"New Delivery Request: Order is {distance} m and {duration} away"
-                    # Insert message into the broadcast_message column of the riders table
                     supabase.table(riders_table).update(
                         {"broadcast_message": message}
                     ).eq("rider_email", rider_email).execute()
-
                 else:
                     logger.warning(
                         "Invalid rider data: email, distance, or duration missing."
@@ -384,7 +401,6 @@ class GetAvailableRidersView(APIView):
 
     def send_customer_notification(self, customer, message):
         try:
-            # Insert message into the notification column of the customers table
             supabase.table(customers_table).update({"notification": message}).eq(
                 "email", customer
             ).execute()
