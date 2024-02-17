@@ -41,15 +41,15 @@ class BaseUserRegistrationView(APIView):
                     with transaction.atomic():
                         # Save the user and create a user object
                         user = user_serializer.save()
-                        user_obj = self.user_model.objects.create(user=user)
 
                         # Serialize the user object
                         user_obj_serializer = self.serializer_class(
-                            user_obj).data
+                            {"user": user, **request.data}
+                        ).data
 
                         if user_obj_serializer:
                             # Send a welcome email or perform any additional actions
-                            send_verification_email(user)
+                            send_verification_email(user, "registration")
 
                             # Return a response with the serialized user object and a success message
                             return Response(
@@ -61,8 +61,7 @@ class BaseUserRegistrationView(APIView):
                             )
                         else:
                             # Raise a validation error if the user object serialization fails
-                            raise ValidationError(
-                                detail=user_obj_serializer.errors)
+                            raise ValidationError(detail=user_obj_serializer.errors)
                 except IntegrityError as e:
                     # Handle integrity errors
                     logger.error(f"Integrity error: {e}")
@@ -246,25 +245,45 @@ class UserPasswordResetView(APIView):
         otp_code = request.data.get("otp_code")
 
         if not new_password:
-            return Response({'detail': 'New Password is required'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "New Password is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         if not otp_code:
-            return Response({'detail': 'OTP is required'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "OTP is required"}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         try:
             user_verification = UserVerification.objects.get(
-                user__email=email, email_otp=otp_code)
+                email_otp=otp_code, used=False
+            )
         except UserVerification.DoesNotExist:
-            return Response({'detail': 'User not found or verification record missing'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "User not found or verification record missing"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         if user_verification.expired:
-            return Response({'detail': 'OTP has expired, request new OTP'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "OTP has expired, request new OTP"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         if new_password != confirm_password:
-            return Response({'detail': 'New password and confirm password do not match'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "New password and confirm password do not match"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         user = user_verification.user
         user.set_password(new_password)
         user.save()
+        
+        user_verification.used = True
+        user_verification.save()
 
-        return Response({'detail': 'Password reset successfully'}, status=status.HTTP_200_OK)
+        return Response(
+            {"detail": "Password reset successfully"}, status=status.HTTP_200_OK
+        )

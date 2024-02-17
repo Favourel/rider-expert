@@ -113,4 +113,12 @@ class RiderSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Rider
-        fields = ("user", "is_available")
+        fields = (
+            "user",
+            "vehicle_type",
+            "vehicle_registration_number",
+            "min_capacity",
+            "max_capacity",
+            "fragile_item_allowed",
+            "charge_per_mile",
+        )

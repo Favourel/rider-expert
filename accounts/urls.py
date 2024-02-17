@@ -11,12 +11,12 @@ urlpatterns = [
     path("token/refresh", TokenRefreshView.as_view(), name="token_refresh"),
     path("token/verify", TokenVerifyView.as_view(), name="token_verify"),
     path(
-        "register_customer/",
+        "customers/",
         views.CustomerRegistrationView.as_view(),
         name="register_customer",
     ),
     path(
-        "riders/register/",
+        "riders/",
         views.RiderRegistrationView.as_view(),
         name="rider-registration",
     ),
