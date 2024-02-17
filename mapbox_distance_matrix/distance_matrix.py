@@ -51,7 +51,9 @@ class MapboxDistanceDuration:
                     }
                 )
             else:
-                print("Error:", response.text)
+                raise Exception(
+                    f"Failed to get response. Status code: {response.status_code}. Error: {response.text}"
+                )
         else:
             for i in range(num_batches):
                 start_idx = i * batch_size
@@ -88,7 +90,9 @@ class MapboxDistanceDuration:
                         )
 
                 else:
-                    print("Error:", response.text)
+                    raise Exception(
+                        f"Failed to get response. Status code: {response.status_code}. Error: {response.text}"
+                    )
 
                 # Wait for a short interval to avoid hitting rate limits
                 if i < num_batches - 1:
@@ -96,7 +100,8 @@ class MapboxDistanceDuration:
 
         return results
 
-    def format_duration(self, duration: int) -> str:
+    @staticmethod
+    def format_duration(duration: int) -> str:
         """
         Format a duration in seconds into a human-readable format.
 
@@ -106,18 +111,11 @@ class MapboxDistanceDuration:
         Returns:
         - str: The formatted duration string.
         """
-        # Convert duration from seconds to minutes and seconds
-        duration_minutes = int(duration // 60)
-        duration_seconds = int(duration % 60)
+        duration_minutes, duration_seconds = divmod(duration, 60)
 
-        # Check if duration is less than or equal to 60 seconds
         if duration <= 60:
-            duration_formatted = f"{duration} secs"
+            return f"{duration} secs"
         elif duration_seconds == 0:
-            duration_formatted = f"{duration_minutes} minutes"
+            return f"{duration_minutes} minutes"
         else:
-            duration_formatted = (
-                f"{duration_minutes} mins {duration_seconds} secs"
-            )
-
-        return duration_formatted
+            return f"{duration_minutes} mins {duration_seconds} secs"

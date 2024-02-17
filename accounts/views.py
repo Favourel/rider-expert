@@ -1,6 +1,8 @@
+import string
 from django.db import transaction
 from django.contrib.auth import authenticate
 from django.utils import timezone
+from tom_tom_map_api.distance_matrix import TomTomDistanceMatrix
 from .tokens import create_jwt_pair_for_user
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
@@ -256,11 +258,16 @@ class GetAvailableRidersView(APIView):
     permission_classes = [IsAuthenticated]
     SEARCH_RADIUS_KM = 5
 
-    def get_mapbox_client(self):
-        """Initialize and return the asynchronous Mapbox API client."""
-        return MapboxDistanceDuration(api_key=settings.MAPBOX_API_KEY)
+    def get_matrix_client(self, client):
+        """Initialize and return the Matrix API client."""
+        if client == "mapbox":
+            return MapboxDistanceDuration(api_key=settings.MAPBOX_API_KEY)
+        elif client == "tomtom":
+            return TomTomDistanceMatrix(api_key=settings.TOMTOM_API_KEY)
 
-    def validate_parameters(self, origin_lat, origin_long, item_capacity, is_fragile):
+    def validate_parameters(
+        self, origin_lat, origin_long, item_capacity, is_fragile, customer_email
+    ):
         """Validate input parameters."""
         try:
             origin_lat = float(origin_lat)
@@ -281,10 +288,10 @@ class GetAvailableRidersView(APIView):
             return False, "Invalid or missing parameters"
         return True, ""
 
-    def handle_mapbox_api_error(self, e):
-        """Handle Mapbox API errors."""
+    def handle_matrix_api_error(self, e):
+        """Handle Matrix API errors."""
         return Response(
-            {"status": "error", "message": f"Mapbox API error: {str(e)}"},
+            {"status": "error", "message": f"Matrix API error: {str(e)}"},
             status=400,
         )
 
@@ -297,7 +304,7 @@ class GetAvailableRidersView(APIView):
 
         # Handle Missing or Invalid Parameters
         is_valid, validation_message = self.validate_parameters(
-            origin_lat, origin_long, item_capacity, is_fragile
+            origin_lat, origin_long, item_capacity, is_fragile, customer_email
         )
         if not is_valid:
             return Response(
@@ -312,11 +319,15 @@ class GetAvailableRidersView(APIView):
             location_within_radius = calculator.destinations_within_radius(
                 riders_location_data, self.SEARCH_RADIUS_KM
             )
-            mapbox = self.get_mapbox_client()
-            mapbox_origin = f"{origin_long},{origin_lat}"
+            mapbox = self.get_matrix_client(client="mapbox")
+            tomtom = self.get_matrix_client(client="tomtom")
+            matrix_origin = f"{origin_long},{origin_lat}"
             try:
-                results = mapbox.get_distance_duration(
-                    mapbox_origin, location_within_radius
+                # results = mapbox.get_distance_duration(
+                #     matrix_origin, location_within_radius
+                # )
+                results = tomtom.get_async_response(
+                    matrix_origin, location_within_radius
                 )
 
                 self.send_customer_notification(
@@ -326,7 +337,7 @@ class GetAvailableRidersView(APIView):
                 self.send_riders_notification(results)
 
             except Exception as e:
-                return self.handle_mapbox_api_error(e)
+                return self.handle_matrix_api_error(e)
 
         return Response(
             {"status": "success", "message": "Notification sent successfully"}
