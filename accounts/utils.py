@@ -98,6 +98,10 @@ def retry(ExceptionToCheck=Exception, tries=3, delay=1, backoff=2, logger=None):
 
     return deco_retry
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 def generate_otp():
     # Generate a time-based OTP using PyOTP
@@ -108,9 +112,7 @@ def generate_otp():
 
 def send_verification_email(user, purpose):
     otp_code = generate_otp()
-    email = user.email
     current_site = "myAuth.com"
-    from_email = settings.DEFAULT_FROM_EMAIL
 
     if purpose == "registration":
         subject = "One time passcode for Email verification"
@@ -122,45 +124,19 @@ def send_verification_email(user, purpose):
         email_body = "Hi {} you requested a password reset on {} \nplease reset your password with the one-time code {}".format(
             user.first_name, current_site, otp_code
         )
+    email = user.email
+    from_email = settings.DEFAULT_FROM_EMAIL
 
     try:
         send_mail(subject, email_body, from_email, [email], fail_silently=False)
     except SMTPException:
-        raise serializers.ValidationError("Email could not be sent.")
+        logger.error("Email could not be sent.")
 
     # Save the OTP in the OTP model
-    otp_instance, created = UserVerification.objects.get_or_create(user=user)
-    otp_instance.otp = otp_code
-    otp_instance.created_at = timezone.now()
-    otp_instance.otp_expiration_time = timezone.now() + timezone.timedelta(minutes=30)
-    otp_instance.save()
-
-
-def str_to_bool(s):
-    return s.lower() in ["true", "1", "yes", "on"]
-
-
-def validate_password(value):
-    # Password must be at least 8 characters long
-    if len(value) < 8:
-        raise serializers.ValidationError(
-            "Password must be at least 8 characters long."
-        )
-
-    # Check for at least one uppercase character
-    if not any(char.isupper() for char in value):
-        raise serializers.ValidationError(
-            "Password must contain at least one uppercase character."
-        )
-
-    # Check for at least one special character
-    special_characters = "!@#$%^&*()-_=+[]{}|;:'\",.<>/?"
-    if not any(char in special_characters for char in value):
-        raise serializers.ValidationError(
-            "Password must contain at least one special character."
-        )
-
-    # Check for at least one number
-    if not any(char.isdigit() for char in value):
-        raise serializers.ValidationError("Password must contain at least one number.")
-    return value
+    time_now = timezone.now()
+    UserVerification.objects.get_or_create(
+        user=user,
+        otp_code=otp_code,
+        created_at=time_now,
+        otp_expiration_time=time_now + timezone.timedelta(minutes=30),
+    )

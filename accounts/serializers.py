@@ -89,44 +89,10 @@ class RiderSerializer(serializers.ModelSerializer):
         model = Rider
         fields = (
             "user",
-            "email",
-            "first_name",
-            "last_name",
-            "phone_number",
-            "password",
-            "confirm_password",
             "vehicle_type",
             "vehicle_registration_number",
             "min_capacity",
             "max_capacity",
             "fragile_item_allowed",
-            "ratings",
             "charge_per_mile",
         )
-
-    def validate(self, data):
-        password = data.get("password")
-        confirm_password = data.pop("confirm_password")
-        if password != confirm_password:
-            raise serializers.ValidationError("Passwords do not match.")
-        try:
-            validate_password(value=password)
-        except serializers.ValidationError as e:
-            raise serializers.ValidationError(e)
-        return data
-
-    def create(self, validated_data):
-        rider_data = {
-            "vehicle_registration_number": validated_data.pop(
-                "vehicle_registration_number", ""
-            ),
-            "min_capacity": validated_data.pop("min_capacity", None),
-            "max_capacity": validated_data.pop("max_capacity", None),
-            "fragile_item_allowed": validated_data.pop("fragile_item_allowed", True),
-            "charge_per_mile": validated_data.pop("charge_per_mile", None),
-        }
-
-        user = CustomUser.objects.create_user(**validated_data)
-        rider = Rider.objects.create(user=user, **rider_data)
-
-        return rider

@@ -29,22 +29,64 @@ class BaseRegistrationView(generics.CreateAPIView):
 
     @transaction.atomic
     def post(self, request, *args, **kwargs):
-        try:
-            serializer = self.serializer_class(data=request.data)
-            serializer.is_valid(raise_exception=True)
-            user = serializer.save()
-            send_verification_email(user.user, "registration")
-            success_message = f"{str(user)} registered successfully"
-            data = {
-                "message": success_message,
-                "data": serializer.data,
-            }
-            return Response(data, status=status.HTTP_201_CREATED)
-        except Exception as e:
-            logger.error(f"An unexpected error occurred: {e}")
-            return Response(
-                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+        # Log the request data
+        logger.debug(f"Request_data: {request.data}")
+
+        # Extract the user data from the request
+        user_data = request.data
+
+        # Validate the user data using the UserSerializer
+        user_serializer = UserSerializer(data=user_data)
+
+        if user_serializer.is_valid():
+            # Access the validated data after validation
+            user_data = user_serializer.validated_data
+
+            if user_data:
+                try:
+                    with transaction.atomic():
+                        # Save the user and create a user object
+                        user = user_serializer.save()
+
+                        # Serialize the user object
+                        user_obj_serializer = self.serializer_class(
+                            {"user": user, **request.data}
+                        ).data
+
+                        if user_obj_serializer:
+                            # Send a welcome email or perform any additional actions
+                            send_verification_email(user, "registration")
+
+                            # Return a response with the serialized user object and a success message
+                            return Response(
+                                {
+                                    "data": user_obj_serializer,
+                                    "message": f"{self.user_model.__name__} registration successful",
+                                },
+                                status=status.HTTP_201_CREATED,
+                            )
+                        else:
+                            # Raise a validation error if the user object serialization fails
+                            raise ValidationError(detail=user_obj_serializer.errors)
+                except IntegrityError as e:
+                    # Handle integrity errors
+                    logger.error(f"Integrity error: {e}")
+                    return Response(
+                        {
+                            "detail": "Integrity error. Please ensure the data is unique."
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                except Exception as e:
+                    # Handle unexpected errors
+                    logger.error(f"An unexpected error occurred: {e}")
+                    return Response(
+                        {"detail": "An unexpected error occurred."},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    )
+        else:
+            # Raise a validation error if the user serializer is not valid
+            raise ValidationError(detail=user_serializer.errors)
 
 
 class RiderRegistrationView(BaseRegistrationView):
@@ -219,7 +261,7 @@ class UserPasswordResetView(APIView):
 
         try:
             user_verification = UserVerification.objects.get(
-                user__email=email, email_otp=otp_code
+                email_otp=otp_code, used=False
             )
         except UserVerification.DoesNotExist:
             return Response(
@@ -242,6 +284,13 @@ class UserPasswordResetView(APIView):
         user = user_verification.user
         user.set_password(new_password)
         user.save()
+        
+        user_verification.used = True
+        user_verification.save()
+
+        return Response(
+            {"detail": "Password reset successfully"}, status=status.HTTP_200_OK
+        )
 
         return Response(
             {"detail": "Password reset successfully"}, status=status.HTTP_200_OK

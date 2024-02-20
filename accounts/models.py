@@ -42,6 +42,11 @@ class UserVerification(models.Model):
     otp = models.CharField(max_length=10, null=True, blank=True)
     created_at = models.DateTimeField(default=timezone.now)
     otp_expiration_time = models.DateTimeField(null=True, blank=True)
+    used = models.BooleanField(default=False)
+
+    @property
+    def expired(self):
+        return self.otp_expiration_time < timezone.now()
 
 
 class Customer(models.Model):
