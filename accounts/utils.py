@@ -97,10 +97,6 @@ def retry(ExceptionToCheck=Exception, tries=3, delay=1, backoff=2, logger=None):
 
     return deco_retry
 
-import logging
-
-logger = logging.getLogger(__name__)
-
 
 def generate_otp():
     # Generate a time-based OTP using PyOTP
@@ -139,3 +135,7 @@ def send_verification_email(user, purpose):
         created_at=time_now,
         otp_expiration_time=time_now + timezone.timedelta(minutes=30),
     )
+
+
+def str_to_bool(s):
+    return s.lower() in ["true", "1", "yes", "on"]
