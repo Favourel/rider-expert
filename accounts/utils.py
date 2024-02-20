@@ -66,7 +66,7 @@ class DistanceCalculator:
         return within_radius
 
 
-def retry(ExceptionToCheck, tries=3, delay=1, backoff=2, logger=None):
+def retry(ExceptionToCheck=Exception, tries=3, delay=1, backoff=2, logger=None):
     """
     Retry decorator with exponential backoff.
     :param ExceptionToCheck: the exception to check. may be a tuple of exceptions to check

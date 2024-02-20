@@ -1,7 +1,8 @@
 from django.db import transaction
 from django.contrib.auth import authenticate
 from django.utils import timezone
-from tom_tom_map_api.distance_matrix import TomTomDistanceMatrix
+from map_clients.map_clients import MapClientsManager
+from map_clients.supabase_query import SupabaseTransactions
 from .tokens import create_jwt_pair_for_user
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
@@ -11,23 +12,16 @@ from .serializers import *
 from .models import *
 from .utils import (
     DistanceCalculator,
-    retry,
     send_verification_email,
     str_to_bool,
 )
-from django.conf import settings
-from mapbox_distance_matrix.distance_matrix import MapboxDistanceDuration
 import logging
-from supabase import create_client, Client
+
 
 logger = logging.getLogger(__name__)
 
-url: str = settings.SUPABASE_URL
-key: str = settings.SUPABASE_KEY
-supabase: Client = create_client(url, key)
-
-riders_table = "riders"
-customers_table = "customers"
+map_clients_manager = MapClientsManager()
+supabase = SupabaseTransactions()
 
 
 class BaseRegistrationView(generics.CreateAPIView):
@@ -258,17 +252,6 @@ class GetAvailableRidersView(APIView):
     permission_classes = [IsAuthenticated]
     SEARCH_RADIUS_KM = 5
 
-    def get_matrix_client(self, client):
-        """Initialize and return the Matrix API client."""
-        api_key = (
-            settings.MAPBOX_API_KEY if client == "mapbox" else settings.TOMTOM_API_KEY
-        )
-        return (
-            MapboxDistanceDuration(api_key)
-            if client == "mapbox"
-            else TomTomDistanceMatrix(api_key)
-        )
-
     def validate_parameters(
         self, origin_lat, origin_long, item_capacity, is_fragile, customer_email
     ):
@@ -298,14 +281,6 @@ class GetAvailableRidersView(APIView):
             {"status": "error", "message": f"Matrix API error: {str(e)}"}, status=400
         )
 
-    @retry(Exception, tries=3, delay=1, backoff=2, logger=logger)
-    def call_matrix_api(self, origin, destinations, client, method_name):
-        """Call Matrix API with retry logic."""
-        matrix_client = self.get_matrix_client(client)
-        matrix_origin = f"{origin[1]},{origin[0]}"
-        method_to_call = getattr(matrix_client, method_name)
-        return method_to_call(matrix_origin, destinations)
-
     def get(self, request, *args, **kwargs):
         origin_long = float(request.GET.get("origin_long"))
         origin_lat = float(request.GET.get("origin_lat"))
@@ -330,79 +305,20 @@ class GetAvailableRidersView(APIView):
                 riders_location_data, self.SEARCH_RADIUS_KM
             )
             try:
-                results = self.call_matrix_api(
-                    origin,
-                    location_within_radius,
-                    client="tomtom",
-                    method_name="get_async_response",
+                map_client = map_clients_manager.get_client()
+                results = map_client.get_distances_duration(
+                    origin, location_within_radius
                 )
-                self.send_customer_notification(
+
+                supabase.send_customer_notification(
                     customer=customer_email, message="Notifying riders close to you"
                 )
-                self.send_riders_notification(results)
+
+                supabase.send_riders_notification(results)
             except Exception as e:
+                map_clients_manager.switch_client()
                 logger.error(f"Error processing API request: {str(e)}")
-                try:
-                    # Fallback mechanism: Use Mapbox API as an alternative
-                    results = self.call_matrix_api(
-                        origin,
-                        location_within_radius,
-                        client="mapbox",
-                        method_name="get_distance_duration",
-                    )
-                    self.send_customer_notification(
-                        customer=customer_email, message="Notifying riders close to you"
-                    )
-                    self.send_riders_notification(results)
-                except Exception as e:
-                    logger.error(f"Error in Mapbox API call: {str(e)}")
-                    return self.handle_matrix_api_error(e)
 
         return Response(
             {"status": "success", "message": "Notification sent successfully"}
         )
-
-    def get_supabase_rider(self):
-        # Fetch all riders locations
-        try:
-            response = (
-                supabase.table(riders_table)
-                .select("rider_email", "current_lat", "current_long")
-                .execute()
-            )
-            return [
-                {
-                    "email": rider["rider_email"],
-                    "location": (rider["current_lat"], rider["current_long"]),
-                }
-                for rider in response.data
-            ]
-        except Exception as e:
-            logger.error(f"Supabase API error: {str(e)}")
-            return
-
-    def send_riders_notification(self, riders):
-        try:
-            for rider in riders:
-                rider_email = rider.get("email")
-                distance = rider.get("distance")
-                duration = rider.get("duration")
-                if all([rider_email, distance is not None, duration is not None]):
-                    message = f"New Delivery Request: Order is {distance} m and {duration} away"
-                    supabase.table(riders_table).update(
-                        {"broadcast_message": message}
-                    ).eq("rider_email", rider_email).execute()
-                else:
-                    logger.warning(
-                        "Invalid rider data: email, distance, or duration missing."
-                    )
-        except Exception as e:
-            logger.error(f"Supabase API error: {str(e)}")
-
-    def send_customer_notification(self, customer, message):
-        try:
-            supabase.table(customers_table).update({"notification": message}).eq(
-                "email", customer
-            ).execute()
-        except Exception as e:
-            logger.error(f"Supabase API error: {str(e)}")
