@@ -292,9 +292,6 @@ class UserPasswordResetView(APIView):
             {"detail": "Password reset successfully"}, status=status.HTTP_200_OK
         )
 
-        return Response(
-            {"detail": "Password reset successfully"}, status=status.HTTP_200_OK
-        )
 
 
 class GetAvailableRidersView(APIView):
