@@ -45,6 +45,15 @@ class Mapbox(MapClients):
         origin,
         destination,
     ):
+        """
+        A method that uses retry decorator to make multiple attempts to get distances and durations between two locations using MapBox API.
+        
+        :param origin: The origin of the distance calculation.
+        :type origin: str
+        :param destination: The destination of the distance calculation.
+        :type destination: str
+        :return: The get_distance_duration method of the mapbox client
+        """
         try:
             mapbox = MapboxDistanceDuration(self.api_key)
             return mapbox.get_distance_duration(origin, destination)
@@ -70,6 +79,16 @@ class TomTom(MapClients):
         origin,
         destination,
     ):
+        """
+        A method that uses retry decorator to make multiple attempts to get distances and durations between two locations using TomTom API.
+        
+        Parameters:
+            origin (str): The starting location.
+            destination (str): The destination location.
+        
+        Returns:
+            func: the get_async_response method of the tomtom client
+        """
         try:
             tomtom = TomTomDistanceMatrix(self.api_key)
             return tomtom.get_async_response(origin, destination)
@@ -84,6 +103,18 @@ class MapClientsManager:
         self.client_name = self.map_client.current_map_client
 
     def get_client(self, client_name=None):
+        """
+        Get the client based on the client name.
+
+        Args:
+            client_name (str, optional): The name of the client. Defaults to None.
+
+        Returns:
+            Mapbox or TomTom: The client object based on the client_name.
+
+        Raises:
+            ValueError: If the client_name is not "mapbox" or "tomtom".
+        """
         if client_name is None:
             client_name = self.client_name
 
@@ -95,6 +126,9 @@ class MapClientsManager:
             raise ValueError(f"Unknown client: {client_name}")
 
     def switch_client(self):
+        """
+        Switches to the next available client and saves the change.
+        """
         current_client = self.get_client()
         if not current_client.is_available:
             current_index = self.map_client_names.index(self.client_name)

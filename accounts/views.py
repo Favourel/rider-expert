@@ -67,8 +67,7 @@ class BaseRegistrationView(generics.CreateAPIView):
                             )
                         else:
                             # Raise a validation error if the user object serialization fails
-                            raise ValidationError(
-                                detail=user_obj_serializer.errors)
+                            raise ValidationError(detail=user_obj_serializer.errors)
                 except IntegrityError as e:
                     # Handle integrity errors
                     logger.error(f"Integrity error: {e}")
@@ -285,14 +284,13 @@ class UserPasswordResetView(APIView):
         user = user_verification.user
         user.set_password(new_password)
         user.save()
-        
+
         user_verification.used = True
         user_verification.save()
 
         return Response(
             {"detail": "Password reset successfully"}, status=status.HTTP_200_OK
         )
-
 
 
 class GetAvailableRidersView(APIView):
@@ -344,7 +342,8 @@ class GetAvailableRidersView(APIView):
             )
 
         origin = (origin_lat, origin_long)
-        riders_location_data = self.get_supabase_rider()
+        fields = ["rider_email", "current_lat", "current_long"]
+        riders_location_data = supabase.get_supabase_riders(fields=fields)
 
         if riders_location_data and origin:
             calculator = DistanceCalculator(origin)
@@ -352,20 +351,25 @@ class GetAvailableRidersView(APIView):
                 riders_location_data, self.SEARCH_RADIUS_KM
             )
             try:
-                map_client = map_clients_manager.get_client()
-                results = map_client.get_distances_duration(
-                    origin, location_within_radius
-                )
+                results = self.get_matrix_results(origin, location_within_radius)
 
-                supabase.send_customer_notification(
-                    customer=customer_email, message="Notifying riders close to you"
-                )
-
-                supabase.send_riders_notification(results)
             except Exception as e:
-                map_clients_manager.switch_client()
                 logger.error(f"Error processing API request: {str(e)}")
+                map_clients_manager.switch_client()
+                results = self.get_matrix_results(origin, location_within_radius)
+
+            supabase.send_customer_notification(
+                customer=customer_email, message="Notifying riders close to you"
+            )
+
+            supabase.send_riders_notification(results)
 
         return Response(
             {"status": "success", "message": "Notification sent successfully"}
         )
+
+    def get_matrix_results(self, origin, destinations):
+        """Get results from Matrix API."""
+        map_client = map_clients_manager.get_client()
+        results = map_client.get_distances_duration(origin, destinations)
+        return results

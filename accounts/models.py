@@ -6,7 +6,6 @@ from django.db import models
 from django.utils import timezone
 from .managers import CustomUserManager
 from django.core.validators import EmailValidator
-import datetime
 
 
 
@@ -65,7 +64,7 @@ class Rider(models.Model):
     min_capacity = models.PositiveIntegerField(null=True, blank=True)
     max_capacity = models.PositiveIntegerField(null=True, blank=True)
     fragile_item_allowed = models.BooleanField(default=True)
-    charge_per_mile = models.DecimalField(
+    charge_per_km = models.DecimalField(
         max_digits=6, decimal_places=2, null=True, blank=True
     )
     ratings = models.DecimalField(max_digits=3, decimal_places=2, null=True, blank=True)

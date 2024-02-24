@@ -81,7 +81,7 @@ class RiderSerializer(serializers.ModelSerializer):
     min_capacity = serializers.IntegerField(required=False, allow_null=True)
     max_capacity = serializers.IntegerField(required=False, allow_null=True)
     fragile_item_allowed = serializers.BooleanField(default=True)
-    charge_per_mile = serializers.DecimalField(
+    charge_per_km = serializers.DecimalField(
         max_digits=6, decimal_places=2, required=False, allow_null=True
     )
 
@@ -94,6 +94,6 @@ class RiderSerializer(serializers.ModelSerializer):
             "min_capacity",
             "max_capacity",
             "fragile_item_allowed",
-            "charge_per_mile",
+            "charge_per_km",
             "ratings"
         )

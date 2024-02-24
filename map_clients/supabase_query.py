@@ -1,6 +1,8 @@
 from django.conf import settings
 import logging
 from supabase import create_client
+from typing import List, Dict, Optional
+
 
 logger = logging.getLogger(__name__)
 
@@ -15,13 +17,22 @@ class SupabaseTransactions:
     def __init__(self):
         self.supabase = create_client(self.supabase_url, self.supabase_key)
 
-    def get_supabase_rider(self):
+    def get_supabase_riders(
+        self,
+        conditions: Optional[List[Dict[str, str]]] = None,
+        fields: Optional[List[str]] = None,
+    ):
         try:
-            response = (
-                self.supabase.table(self.riders_table)
-                .select("rider_email", "current_lat", "current_long")
-                .execute()
-            )
+            query = self.supabase.table(self.riders_table)
+            if fields is None:
+                fields = ['*']
+            query = query.select(*fields)
+            if conditions:
+                for condition in conditions:
+                    query = query.eq(condition["column"], condition["value"])
+
+            response = query.execute()
+
             return [
                 {
                     "email": rider["rider_email"],
