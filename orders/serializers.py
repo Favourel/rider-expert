@@ -20,6 +20,8 @@ class OrderSerializer(serializers.ModelSerializer):
             "fragile",
         ]
 
+        read_only_fields = ["customer"]
+
 
 class OrderDetailSerializer(serializers.ModelSerializer):
     class Meta:

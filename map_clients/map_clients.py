@@ -62,7 +62,7 @@ class Mapbox(MapClients):
 
 
 class TomTom(MapClients):
-    def __init__(self, api_key):
+    def __init__(self, api_key=None):
         if api_key is None:
             api_key = settings.TOMTOM_API_KEY
         super().__init__(api_key)

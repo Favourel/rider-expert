@@ -25,7 +25,7 @@ class SupabaseTransactions:
         try:
             query = self.supabase.table(self.riders_table)
             if fields is None:
-                fields = ['*']
+                fields = ["*"]
             query = query.select(*fields)
             if conditions:
                 for condition in conditions:
@@ -36,13 +36,12 @@ class SupabaseTransactions:
             return [
                 {
                     "email": rider["rider_email"],
-                    "location": (rider["current_lat"], rider["current_long"]),
+                    "location": "{},{}".format(rider["current_long"], rider["current_lat"]),
                 }
                 for rider in response.data
             ]
         except Exception as e:
             self.handle_error(e)
-            return None
 
     def send_riders_notification(self, riders):
         try:
@@ -72,3 +71,4 @@ class SupabaseTransactions:
 
     def handle_error(self, error):
         logger.error(f"Supabase API error: {str(error)}")
+        raise error

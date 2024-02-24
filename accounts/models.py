@@ -44,8 +44,8 @@ class UserVerification(models.Model):
     used = models.BooleanField(default=False)
 
     @property
-    def expired(self):
-        return self.otp_expiration_time < timezone.now()
+    def has_expired(self):
+        return self.otp_expiration_time > timezone.now()
 
 
 class Customer(models.Model):

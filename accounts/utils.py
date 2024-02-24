@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 class DistanceCalculator:
     def __init__(self, origin):
         self.origin = origin
+        self.origin_long, self.origin_lat = map(float, self.origin.split(","))
 
     def haversine_distance(self, lat1, lon1, lat2, lon2):
         """
@@ -45,7 +46,7 @@ class DistanceCalculator:
 
         Parameters:
         riders_locations: List of dictionaries, each containing 'email' and 'location' keys.
-                    'location' is a tuple containing latitude and longitude.
+                    'location' is a str containing 'longitude,latitude'.
         radius: Radius in kilometers.
 
         Returns:
@@ -53,8 +54,8 @@ class DistanceCalculator:
         """
         within_radius = []
         for location in riders_locations:
-            lat, lon = location["location"]
-            distance = self.haversine_distance(self.origin[0], self.origin[1], lat, lon)
+            lon, lat = map(float, location["location"].split(","))
+            distance = self.haversine_distance(self.origin_lat, self.origin_long, lat, lon)
             if distance <= radius:
                 within_radius.append(
                     {
@@ -131,7 +132,7 @@ def send_verification_email(user, purpose):
     time_now = timezone.now()
     UserVerification.objects.get_or_create(
         user=user,
-        otp_code=otp_code,
+        otp=otp_code,
         created_at=time_now,
         otp_expiration_time=time_now + timezone.timedelta(minutes=30),
     )

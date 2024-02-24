@@ -27,6 +27,7 @@ supabase = SupabaseTransactions()
 
 class BaseRegistrationView(generics.CreateAPIView):
     serializer_class = None
+    user_model = None
 
     @transaction.atomic
     def post(self, request, *args, **kwargs):
@@ -48,6 +49,18 @@ class BaseRegistrationView(generics.CreateAPIView):
                     with transaction.atomic():
                         # Save the user and create a user object
                         user = user_serializer.save()
+
+                        # Create the Rider or Customer object
+                        self.user_model.objects.create(
+                            user=user,
+                            vehicle_registration_number=request.data[
+                                "vehicle_registration_number"
+                            ],
+                            min_capacity=request.data["min_capacity"],
+                            max_capacity=request.data["max_capacity"],
+                            fragile_item_allowed=request.data["fragile_item_allowed"],
+                            charge_per_km=request.data["charge_per_km"],
+                        )
 
                         # Serialize the user object
                         user_obj_serializer = self.serializer_class(
@@ -92,10 +105,12 @@ class BaseRegistrationView(generics.CreateAPIView):
 
 class RiderRegistrationView(BaseRegistrationView):
     serializer_class = RiderSerializer
+    user_model = Rider
 
 
 class CustomerRegistrationView(BaseRegistrationView):
     serializer_class = CustomerSerializer
+    user_model = Customer
 
 
 class VerifyEmailView(APIView):
@@ -128,18 +143,17 @@ class VerifyEmailView(APIView):
                 {"detail": "Invalid OTP token"}, status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Check if user_verification exists and the email has not expired
+        # Check if user_verification exists and the email_otp has not expired
         if user_verification and (
-            user_verification.otp_expiration_time > timezone.now()
-            and not user_verification.user.is_verified
+            not user_verification.has_expired and not user_verification.user.is_verified
         ):
             # Mark the user as verified
-            user_verification.user.is_verified = True
-            user_verification.user.save()
+            user = user_verification.user
+            user.is_verified = True
+            user.save()
 
             # Invalidate the OTP token
-            user_verification.otp = None
-            user_verification.otp_expiration_time = None
+            user_verification.used = True
             user_verification.save()
 
             return Response(
@@ -261,16 +275,14 @@ class UserPasswordResetView(APIView):
             )
 
         try:
-            user_verification = UserVerification.objects.get(
-                email_otp=otp_code, used=False
-            )
+            user_verification = UserVerification.objects.get(otp=otp_code, used=False)
         except UserVerification.DoesNotExist:
             return Response(
                 {"detail": "User not found or verification record missing"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if user_verification.expired:
+        if user_verification.has_expired:
             return Response(
                 {"detail": "OTP has expired, request new OTP"},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -342,7 +354,7 @@ class GetAvailableRidersView(APIView):
                 {"status": "error", "message": validation_message}, status=400
             )
 
-        origin = (origin_lat, origin_long)
+        origin = f"{origin_long},{origin_lat}"
         fields = ["rider_email", "current_lat", "current_long"]
         riders_location_data = supabase.get_supabase_riders(fields=fields)
 
@@ -351,13 +363,18 @@ class GetAvailableRidersView(APIView):
             location_within_radius = calculator.destinations_within_radius(
                 riders_location_data, self.SEARCH_RADIUS_KM
             )
-            try:
-                results = self.get_matrix_results(origin, location_within_radius)
+            if not location_within_radius:
+                supabase.send_customer_notification(
+                    customer=customer_email, message="No rider around you"
+                )
+            else:
+                try:
+                    results = self.get_matrix_results(origin, location_within_radius)
 
-            except Exception as e:
-                logger.error(f"Error processing API request: {str(e)}")
-                map_clients_manager.switch_client()
-                results = self.get_matrix_results(origin, location_within_radius)
+                except Exception as e:
+                    logger.error(f"Error processing API request: {str(e)}")
+                    map_clients_manager.switch_client()
+                    results = self.get_matrix_results(origin, location_within_radius)
 
             supabase.send_customer_notification(
                 customer=customer_email, message="Notifying riders close to you"

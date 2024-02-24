@@ -1,6 +1,7 @@
-import logging
 from accounts.models import Rider
 from accounts.serializers import RiderSerializer
+from django.db import transaction
+from django.shortcuts import get_object_or_404
 from map_clients.map_clients import MapClientsManager
 from map_clients.supabase_query import SupabaseTransactions
 from rest_framework import status
@@ -9,7 +10,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from .models import Order
 from .serializers import OrderSerializer, OrderDetailSerializer
-from django.shortcuts import get_object_or_404
+import logging
 
 map_clients_manager = MapClientsManager()
 supabase = SupabaseTransactions()
@@ -17,12 +18,14 @@ supabase = SupabaseTransactions()
 logger = logging.getLogger(__name__)
 
 
-class OrderCreateView(APIView):
+class CreateOrder(APIView):
     permission_classes = [IsAuthenticated]
 
+    @transaction.atomic
     def post(self, request, *args, **kwargs):
         serializer = OrderSerializer(data=request.data)
         if serializer.is_valid():
+            serializer.validated_data["customer"] = request.user.customer
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -46,45 +49,39 @@ class AcceptOrderView(APIView):
         order = get_object_or_404(Order, id=order_id)
 
         rider = get_object_or_404(Rider, user__email=rider_email)
-        order_location = f"{order.pickup_long:.6f}, {order.pickup_lat:.6f}"
+        order_location = f"{order.pickup_long:.6f},{order.pickup_lat:.6f}"
 
-        # Check if the rider has accepted the order
-        if request.data.get("accept_order"):
-            conditions = [{"column": "rider_email", "value": rider_email}]
-            fields = ["rider_email", "current_lat", "current_long"]
+        conditions = [{"column": "rider_email", "value": rider_email}]
+        fields = ["rider_email", "current_lat", "current_long"]
 
-            rider_data = supabase.get_supabase_riders(
-                conditions=conditions, fields=fields
-            )
-            try:
-                result = self.get_matrix_results(order_location, rider_data)
-            except Exception as e:
-                logger.error(f"Error processing API request: {str(e)}")
-                map_clients_manager.switch_client()
-                result = self.get_matrix_results(order_location, rider_data)
+        rider_data = supabase.get_supabase_riders(
+            conditions=conditions, fields=fields
+        )
+        try:
+            result = self.get_matrix_results(order_location, rider_data)
+        except Exception as e:
+            logger.error(f"Error processing API request: {str(e)}")
+            map_clients_manager.switch_client()
+            result = self.get_matrix_results(order_location, rider_data)
 
-            distance = result["distance"]
-            duration = result["duration"]
+        distance = result[0]["distance"]
+        duration = result[0]["duration"]
 
-            # Calculate the cost of the ride based on the distance of the trip
-            cost_of_ride = round((rider.charge_per_km * distance / 1000), 2)
+        # Calculate the cost of the ride based on the distance of the trip
+        cost_of_ride = round((rider.charge_per_km * distance / 1000), 2)
 
-            serializer = RiderSerializer(rider)
+        serializer = RiderSerializer(rider)
 
-            # Return the rider's information
-            return Response(
-                {
-                    "rider": serializer.data,
-                    "cost_of_ride": cost_of_ride,
-                    "distance": distance,
-                    "duration": duration,
-                },
-                status=status.HTTP_200_OK,
-            )
-
-        else:
-            # If the rider declines the order, return an empty response
-            return Response({})
+        # Return the rider's information
+        return Response(
+            {
+                "rider": serializer.data,
+                "cost_of_ride": cost_of_ride,
+                "distance": distance,
+                "duration": duration,
+            },
+            status=status.HTTP_200_OK,
+        )
 
     def get_matrix_results(self, origin, destinations):
         """Get results from Matrix API."""
