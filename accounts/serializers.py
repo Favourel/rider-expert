@@ -121,4 +121,5 @@ class RiderSerializer(serializers.ModelSerializer):
             "max_capacity",
             "fragile_item_allowed",
             "charge_per_mile",
+            "ratings"
         )
