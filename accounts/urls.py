@@ -11,19 +11,19 @@ urlpatterns = [
     path("token/refresh", TokenRefreshView.as_view(), name="token_refresh"),
     path("token/verify", TokenVerifyView.as_view(), name="token_verify"),
     path(
-        "register_customer/",
+        "customers/",
         views.CustomerRegistrationView.as_view(),
         name="register_customer",
     ),
     path(
-        "riders/register/",
+        "riders/",
         views.RiderRegistrationView.as_view(),
         name="rider-registration",
     ),
     path("verify-email/", views.VerifyEmailView.as_view(), name="verify-email"),
     path("login/", views.LoginView.as_view(), name="login"),
     path(
-        "forgot_password/", views.ForgotPasswordView.as_view(), name="forgot_password"
+        "reset_password/", views.UserPasswordResetView.as_view(), name="reset_password"
     ),
     path(
         "accept-decline-ride/", views.AcceptDeclineOrder.as_view(), name="accept_decline_rider"

@@ -113,12 +113,12 @@ class RiderSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Rider
-        fields = ("user", "is_available")
-
-class AcceptDeclineOrderSerializer(serializers.ModelSerializer):
-    user = CustomUserNestedSerializer(read_only=True)
-
-    class Meta:
-        model = Rider
-        fields = ("user", "vehicle_type", "vehicle_registration_number")
-              
+        fields = (
+            "user",
+            "vehicle_type",
+            "vehicle_registration_number",
+            "min_capacity",
+            "max_capacity",
+            "fragile_item_allowed",
+            "charge_per_mile",
+        )
