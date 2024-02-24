@@ -1,4 +1,4 @@
-from django.db import transaction
+from django.db import transaction, IntegrityError
 from django.contrib.auth import authenticate
 from django.utils import timezone
 from map_clients.map_clients import MapClientsManager
@@ -7,6 +7,7 @@ from .tokens import create_jwt_pair_for_user
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.serializers import ValidationError
 from rest_framework import generics, status
 from .serializers import *
 from .models import *
