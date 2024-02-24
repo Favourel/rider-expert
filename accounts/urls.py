@@ -26,6 +26,9 @@ urlpatterns = [
         "reset_password/", views.UserPasswordResetView.as_view(), name="reset_password"
     ),
     path(
-        "accept-decline-ride/", views.AcceptDeclineOrder.as_view(), name="accept_decline_rider"
+        "available_rider/",
+        views.GetAvailableRidersView.as_view(),
+        name="available_rider",
     ),
+
 ]

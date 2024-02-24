@@ -1,24 +1,30 @@
-from django.db import transaction, IntegrityError
-from django.core.exceptions import ObjectDoesNotExist
+from django.db import transaction
 from django.contrib.auth import authenticate
 from django.utils import timezone
+from map_clients.map_clients import MapClientsManager
+from map_clients.supabase_query import SupabaseTransactions
 from .tokens import create_jwt_pair_for_user
 from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework import status
-from rest_framework.serializers import ValidationError
+from rest_framework import generics, status
 from .serializers import *
 from .models import *
-from .utils import send_verification_email
-from django.shortcuts import get_object_or_404
-
+from .utils import (
+    DistanceCalculator,
+    send_verification_email,
+    str_to_bool,
+)
 import logging
+
 
 logger = logging.getLogger(__name__)
 
+map_clients_manager = MapClientsManager()
+supabase = SupabaseTransactions()
 
-class BaseUserRegistrationView(APIView):
-    user_model = None
+
+class BaseRegistrationView(generics.CreateAPIView):
     serializer_class = None
 
     @transaction.atomic
@@ -84,13 +90,11 @@ class BaseUserRegistrationView(APIView):
             raise ValidationError(detail=user_serializer.errors)
 
 
-class RiderRegistrationView(BaseUserRegistrationView):
-    user_model = Rider
+class RiderRegistrationView(BaseRegistrationView):
     serializer_class = RiderSerializer
 
 
-class CustomerRegistrationView(BaseUserRegistrationView):
-    user_model = Customer
+class CustomerRegistrationView(BaseRegistrationView):
     serializer_class = CustomerSerializer
 
 
@@ -290,8 +294,78 @@ class UserPasswordResetView(APIView):
         )
 
 
-class AcceptDeclineOrder(APIView):
-    def get(self, request, rider_email, *args, **kwargs):
-        rider = get_object_or_404(Rider, email=rider_email)
-        serializer = AcceptDeclineOrderSerializer(rider)
-        return Response(serializer.data, {'detail': 'Ride accepted successfully'}, status=status.HTTP_200_OK)
+
+class GetAvailableRidersView(APIView):
+    permission_classes = [IsAuthenticated]
+    SEARCH_RADIUS_KM = 5
+
+    def validate_parameters(
+        self, origin_lat, origin_long, item_capacity, is_fragile, customer_email
+    ):
+        """Validate input parameters."""
+        try:
+            origin_lat = float(origin_lat)
+            origin_long = float(origin_long)
+            item_capacity = float(item_capacity)
+            is_fragile = str_to_bool(is_fragile)
+        except ValueError:
+            return False, "Invalid or missing parameters"
+
+        if (
+            not all(
+                isinstance(param, (float, int))
+                for param in [origin_lat, origin_long, item_capacity]
+            )
+            or not isinstance(is_fragile, bool)
+            or not isinstance(customer_email, str)
+        ):
+            return False, "Invalid or missing parameters"
+        return True, ""
+
+    def handle_matrix_api_error(self, e):
+        """Handle Matrix API errors."""
+        return Response(
+            {"status": "error", "message": f"Matrix API error: {str(e)}"}, status=400
+        )
+
+    def get(self, request, *args, **kwargs):
+        origin_long = float(request.GET.get("origin_long"))
+        origin_lat = float(request.GET.get("origin_lat"))
+        item_capacity = request.GET.get("item_capacity")
+        is_fragile = request.GET.get("is_fragile")
+        customer_email = request.GET.get("customer_email")
+
+        is_valid, validation_message = self.validate_parameters(
+            origin_lat, origin_long, item_capacity, is_fragile, customer_email
+        )
+        if not is_valid:
+            return Response(
+                {"status": "error", "message": validation_message}, status=400
+            )
+
+        origin = (origin_lat, origin_long)
+        riders_location_data = self.get_supabase_rider()
+
+        if riders_location_data and origin:
+            calculator = DistanceCalculator(origin)
+            location_within_radius = calculator.destinations_within_radius(
+                riders_location_data, self.SEARCH_RADIUS_KM
+            )
+            try:
+                map_client = map_clients_manager.get_client()
+                results = map_client.get_distances_duration(
+                    origin, location_within_radius
+                )
+
+                supabase.send_customer_notification(
+                    customer=customer_email, message="Notifying riders close to you"
+                )
+
+                supabase.send_riders_notification(results)
+            except Exception as e:
+                map_clients_manager.switch_client()
+                logger.error(f"Error processing API request: {str(e)}")
+
+        return Response(
+            {"status": "success", "message": "Notification sent successfully"}
+        )
