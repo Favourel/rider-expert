@@ -1,4 +1,5 @@
 from django.conf import settings
+from orders.serializers import OrderSerializer
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -67,3 +68,23 @@ class AssignOrderToRiderAPIView(APIView):
             return {"distance": distance, "duration": duration}
         except Exception as e:
             raise Exception(str(e))
+
+
+class OrderCreateView(APIView):
+    def post(self, request, *args, **kwargs):
+        serializer = OrderSerializer(data=request.data)
+
+        if serializer.is_valid():
+            quantity = serializer.validated_data['quantity']
+            pickup_location = serializer.validated_data['pickup_location']
+            delivery_location = serializer.validated_data['delivery_location']
+
+            order = Order.objects.create(
+                quantity=quantity,
+                pickup_location=pickup_location,
+                delivery_location=delivery_location,
+            )
+
+            return Response({'detail': 'Order created successfully'}, status=status.HTTP_201_CREATED)
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

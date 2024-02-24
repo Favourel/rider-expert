@@ -42,17 +42,25 @@ class UserVerification(models.Model):
     otp = models.CharField(max_length=10, null=True, blank=True)
     created_at = models.DateTimeField(default=timezone.now)
     otp_expiration_time = models.DateTimeField(null=True, blank=True)
+    used = models.BooleanField(default=False)
+
+    @property
+    def expired(self):
+        return self.otp_expiration_time < timezone.now()
 
 
 class Customer(models.Model):
     user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, primary_key=True)
-    
+
+    def __str__(self):
+        return self.user.email
+
 
 class Rider(models.Model):
     user = models.OneToOneField(
         CustomUser, on_delete=models.CASCADE, related_name="rider_profile"
     )
-    vehicle_type = models.CharField(max_length=50)
+    vehicle_type = models.CharField(max_length=50, default="TWO_WHEELER")
     vehicle_registration_number = models.CharField(max_length=20, unique=True)
     min_capacity = models.PositiveIntegerField(null=True, blank=True)
     max_capacity = models.PositiveIntegerField(null=True, blank=True)
