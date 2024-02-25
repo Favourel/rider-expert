@@ -153,51 +153,88 @@ class AcceptOrderView(APIView):
         return results
 
 
-class AssignOrderToRiderAPIView(APIView):
+
+class AssignOrderToRiderView(APIView):
+    """
+    This view assigns an order to a rider.
+    """
     permission_classes = [IsAuthenticated]
 
-    def get_model_instance(self, model, id):
-        model_instance = model.objects.get(id)
-        return model_instance
+    @transaction.atomic
+    def post(self, request, *args, **kwargs):
+        """
+        This method handles the POST request to assign an order to a rider.
+        It assigns the rider to the order, updates the order status, and sends notifications to both the rider and the customer.
+        """
 
-    def post(self, request, order_id, rider_email):
+        rider_email = request.data.get("rider_email")
+        order_id = request.data.get("order_id")
+        price = request.data.get("price")
+
         try:
-            order = self.get_model_instance(Order, order_id)
-            rider = self.get_model_instance(Rider, rider_email)
+            # Get the order and rider objects
+            order = get_object_or_404(Order, id=order_id)
+            rider = get_object_or_404(Rider, user__email=rider_email)
+
+            # Assign the rider to the order and update the order status
             order.rider = rider
-            order_location = order.pickup_address
             order.status = "Waiting for pickup"
 
+            # Get the order location
+            order_location = f"{order.pickup_long},{order.pickup_lat}"
+
+            # Define conditions and fields for retrieving rider data from supabase
+            conditions = [{"column": "rider_email", "value": rider_email}]
+            fields = ["rider_email", "current_lat", "current_long"]
+
+            # Retrieve rider data from supabase
+            rider_data = supabase.get_supabase_riders(
+                conditions=conditions, fields=fields
+            )
+
+            try:
+                # Get distance and duration from the matrix results
+                result = self.get_matrix_results(order_location, rider_data)
+            except Exception as e:
+                # Handle exception and retry
+                logger.error(f"Error processing API request: {str(e)}")
+                map_clients_manager.switch_client()
+                result = self.get_matrix_results(order_location, rider_data)
+
+            # Extract distance and duration from the result
+            distance = result[0]["distance"]
+            duration = result[0]["duration"]
+
+            # Send notification to the rider
+            rider_message = (
+                f"Order Accepted: Order is {distance} km and {duration} away"
+            )
+            supabase.send_riders_notification(result, message=rider_message)
+
+            # Send notification to the customer
+            customer = order.customer.user.email
+            customer_message = (
+                f"Order Accepted: Rider is {distance} km and {duration} away"
+            )
+            supabase.send_customer_notification(customer, customer_message)
+
+            # Update the order price and save the order
+            order.price = price
             order.save()
-            return Response({"status": status.HTTP_200_OK, "riders": order_data})
+
+            # Serialize the updated order and attach distance and duration
+            serializer = OrderSerializer(order)
+            response_data = serializer.data
+            response_data["distance"] = distance
+            response_data["duration"] = duration
+
+            return Response(response_data, status=status.HTTP_200_OK)
         except (Rider.DoesNotExist, Order.DoesNotExist):
+            # Handle if rider or order not found
             return Response("Rider or Order not found")
 
-    def get_rider_location(self, rider_email):
-        try:
-            rider_location_ref = riderexpert_db.collection("riders").document(
-                rider_email
-            )
-            rider_location_data = rider_location_ref.get()
-
-            rider_location = (
-                rider_location_data.get("current_latitude"),
-                rider_location_data.get("current_longitude"),
-            )
-            return rider_location
-        except Exception as e:
-            raise Exception(str(e))
-
-    def get_distance_matrix(self, gmaps, order_location, rider_location):
-        try:
-            distance_matrix_result = gmaps.distance_matrix(
-                origins=rider_location,
-                destinations=order_location,
-                mode="driving",
-                units="metric",
-            )
-            distance = distance_matrix_result["rows"][0]["elements"][0]["distance"]
-            duration = distance_matrix_result["rows"][0]["elements"][0]["duration"]
-            return {"distance": distance, "duration": duration}
-        except Exception as e:
-            raise Exception(str(e))
+    def get_matrix_results(self, origin, destinations):
+        """Get results from Matrix API."""
+        map_client = map_clients_manager.get_client()
+        results = map_client.get_distances_duration(origin, destinations)
+        return results

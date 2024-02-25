@@ -382,7 +382,7 @@ class GetAvailableRidersView(APIView):
                 customer=customer_email, message="Notifying riders close to you"
             )
 
-            supabase.send_riders_notification(results, price_offer)
+            supabase.send_riders_notification(results, price=price_offer)
 
         return Response(
             {"status": "success", "message": "Notification sent successfully"}
