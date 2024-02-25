@@ -2,6 +2,7 @@ from accounts.models import Rider
 from accounts.serializers import RiderSerializer
 from django.db import transaction
 from django.shortcuts import get_object_or_404
+from accounts.utils import DistanceCalculator
 from map_clients.map_clients import MapClientsManager
 from map_clients.supabase_query import SupabaseTransactions
 from rest_framework import status
@@ -50,13 +51,17 @@ class AcceptOrderView(APIView):
 
         rider = get_object_or_404(Rider, user__email=rider_email)
         order_location = f"{order.pickup_long:.6f},{order.pickup_lat:.6f}"
+        recipient_long = order.recipient_long
+        recipient_lat = order.recipient_lat
+        recipient_location = f"{recipient_long:.6f},{recipient_lat:.6f}"
 
         conditions = [{"column": "rider_email", "value": rider_email}]
         fields = ["rider_email", "current_lat", "current_long"]
 
-        rider_data = supabase.get_supabase_riders(
-            conditions=conditions, fields=fields
-        )
+        rider_data = supabase.get_supabase_riders(conditions=conditions, fields=fields)
+
+        rider_long, rider_lat = map(float, rider_data[0]["location"].split(","))
+        
         try:
             result = self.get_matrix_results(order_location, rider_data)
         except Exception as e:
@@ -67,8 +72,13 @@ class AcceptOrderView(APIView):
         distance = result[0]["distance"]
         duration = result[0]["duration"]
 
+        distance_calc = DistanceCalculator(recipient_location)
+        trip_distance = distance_calc.haversine_distance(
+            recipient_lat, recipient_long, rider_lat, rider_long
+        )
+
         # Calculate the cost of the ride based on the distance of the trip
-        cost_of_ride = round((rider.charge_per_km * distance / 1000), 2)
+        cost_of_ride = round((float(rider.charge_per_km) * trip_distance), 2)
 
         serializer = RiderSerializer(rider)
 
