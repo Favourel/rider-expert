@@ -11,10 +11,6 @@ from accounts.models import Rider
 class AssignOrderToRiderAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def get_google_maps_client(self):
-        """Initialize and return the asynchronous Google Maps API client."""
-        return GoogleMapsClient(key=settings.GOOGLE_MAPS_API_KEY)
-
     def get_model_instance(self, model, id):
         model_instance = model.objects.get(id)
         return model_instance
@@ -27,14 +23,6 @@ class AssignOrderToRiderAPIView(APIView):
             order_location = order.pickup_address
             order.status = "Waiting for pickup"
 
-            gmaps = self.get_google_maps_client()
-            rider_location = self.get_rider_location(rider_email)
-            distance_matrix_result = self.get_distance_matrix(
-                gmaps=gmaps,
-                order_location=order_location,
-                rider_location=rider_location,
-            )
-            order_data = {distance_matrix_result, order}
             order.save()
             return Response({"status": status.HTTP_200_OK, "riders": order_data})
         except (Rider.DoesNotExist, Order.DoesNotExist):
@@ -75,9 +63,9 @@ class OrderCreateView(APIView):
         serializer = OrderSerializer(data=request.data)
 
         if serializer.is_valid():
-            quantity = serializer.validated_data['quantity']
-            pickup_location = serializer.validated_data['pickup_location']
-            delivery_location = serializer.validated_data['delivery_location']
+            quantity = serializer.validated_data["quantity"]
+            pickup_location = serializer.validated_data["pickup_location"]
+            delivery_location = serializer.validated_data["delivery_location"]
 
             order = Order.objects.create(
                 quantity=quantity,
@@ -85,6 +73,8 @@ class OrderCreateView(APIView):
                 delivery_location=delivery_location,
             )
 
-            return Response({'detail': 'Order created successfully'}, status=status.HTTP_201_CREATED)
+            return Response(
+                {"detail": "Order created successfully"}, status=status.HTTP_201_CREATED
+            )
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
