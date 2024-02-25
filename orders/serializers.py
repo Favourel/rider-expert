@@ -3,6 +3,8 @@ from .models import Order
 
 
 class OrderSerializer(serializers.ModelSerializer):
+    cost = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+
     class Meta:
         model = Order
         fields = [
@@ -18,6 +20,7 @@ class OrderSerializer(serializers.ModelSerializer):
             "parcel_weight",
             "parcel_value",
             "fragile",
+            "cost"
         ]
 
         read_only_fields = ["customer"]

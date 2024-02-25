@@ -43,14 +43,14 @@ class SupabaseTransactions:
         except Exception as e:
             self.handle_error(e)
 
-    def send_riders_notification(self, riders):
+    def send_riders_notification(self, riders, price):
         try:
             for rider in riders:
                 rider_email = rider.get("email")
                 distance = rider.get("distance")
                 duration = rider.get("duration")
                 if all([rider_email, distance is not None, duration is not None]):
-                    message = f"New Delivery Request: Order is {distance} m and {duration} away"
+                    message = f"New Delivery Request: Order is {distance} m and {duration} away with price tag of {price}"
                     self.supabase.table(self.riders_table).update(
                         {"broadcast_message": message}
                     ).eq("rider_email", rider_email).execute()

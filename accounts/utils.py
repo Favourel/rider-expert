@@ -55,7 +55,9 @@ class DistanceCalculator:
         within_radius = []
         for location in riders_locations:
             lon, lat = map(float, location["location"].split(","))
-            distance = self.haversine_distance(self.origin_lat, self.origin_long, lat, lon)
+            distance = self.haversine_distance(
+                self.origin_lat, self.origin_long, lat, lon
+            )
             if distance <= radius:
                 within_radius.append(
                     {

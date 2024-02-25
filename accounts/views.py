@@ -311,13 +311,14 @@ class GetAvailableRidersView(APIView):
     SEARCH_RADIUS_KM = 5
 
     def validate_parameters(
-        self, origin_lat, origin_long, item_capacity, is_fragile, customer_email
+        self, origin_lat, origin_long, item_capacity, is_fragile, customer_email, price_offer
     ):
         """Validate input parameters."""
         try:
             origin_lat = float(origin_lat)
             origin_long = float(origin_long)
             item_capacity = float(item_capacity)
+            price_offer = float(price_offer)
             is_fragile = str_to_bool(is_fragile)
         except ValueError:
             return False, "Invalid or missing parameters"
@@ -325,7 +326,7 @@ class GetAvailableRidersView(APIView):
         if (
             not all(
                 isinstance(param, (float, int))
-                for param in [origin_lat, origin_long, item_capacity]
+                for param in [origin_lat, origin_long, item_capacity, price_offer]
             )
             or not isinstance(is_fragile, bool)
             or not isinstance(customer_email, str)
@@ -345,9 +346,10 @@ class GetAvailableRidersView(APIView):
         item_capacity = request.GET.get("item_capacity")
         is_fragile = request.GET.get("is_fragile")
         customer_email = request.GET.get("customer_email")
+        price_offer = request.GET.get("price")
 
         is_valid, validation_message = self.validate_parameters(
-            origin_lat, origin_long, item_capacity, is_fragile, customer_email
+            origin_lat, origin_long, item_capacity, is_fragile, customer_email, price_offer
         )
         if not is_valid:
             return Response(
@@ -380,7 +382,7 @@ class GetAvailableRidersView(APIView):
                 customer=customer_email, message="Notifying riders close to you"
             )
 
-            supabase.send_riders_notification(results)
+            supabase.send_riders_notification(results, price_offer)
 
         return Response(
             {"status": "success", "message": "Notification sent successfully"}

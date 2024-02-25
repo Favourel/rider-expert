@@ -28,7 +28,7 @@ class Order(models.Model):
     recipient_lat = models.FloatField(blank=True, null=True)
     recipient_long = models.FloatField(blank=True, null=True)
     recipient_phone_number = models.CharField(max_length=15)
-    order_completion_code = models.CharField(max_length=10, unique=True)
+    order_completion_code = models.CharField(max_length=10, blank=True, null=True)
     parcel_weight = models.DecimalField(
         max_digits=5, decimal_places=2, validators=[MinValueValidator(0.01)]
     )

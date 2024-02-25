@@ -1,6 +1,8 @@
+from decimal import Decimal
 from accounts.models import Rider
 from accounts.serializers import RiderSerializer
 from django.db import transaction
+from django.db.models import Avg
 from django.shortcuts import get_object_or_404
 from accounts.utils import DistanceCalculator
 from map_clients.map_clients import MapClientsManager
@@ -19,16 +21,56 @@ supabase = SupabaseTransactions()
 logger = logging.getLogger(__name__)
 
 
-class CreateOrder(APIView):
+class CreateOrderView(APIView):
     permission_classes = [IsAuthenticated]
+    SEARCH_RADIUS_KM = 5
 
     @transaction.atomic
     def post(self, request, *args, **kwargs):
         serializer = OrderSerializer(data=request.data)
+
+        recipient_lat = request.data.get("recipient_lat")
+        recipient_long = request.data.get("recipient_long")
+
+        pickup_lat = request.data.get("pickup_lat")
+        pickup_long = request.data.get("pickup_long")
+
+        order_location = f"{pickup_long:.6f},{pickup_lat:.6f}"
+
         if serializer.is_valid():
             serializer.validated_data["customer"] = request.user.customer
             serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+            distance_calc = DistanceCalculator(order_location)
+
+            trip_distance = distance_calc.haversine_distance(
+                recipient_lat, recipient_long, pickup_lat, pickup_long
+            )
+
+            fields = ["rider_email", "current_lat", "current_long"]
+            riders_location_data = supabase.get_supabase_riders(fields=fields)
+            riders_within_radius = distance_calc.destinations_within_radius(
+                riders_location_data, self.SEARCH_RADIUS_KM
+            )
+
+            rider_emails = [rider['email'] for rider in riders_within_radius]
+
+            # Query Rider model to get charge_per_km for riders within radius
+            riders_within_radius_queryset = Rider.objects.filter(user__email__in=rider_emails)
+            average_charge_per_km = riders_within_radius_queryset.aggregate(avg_charge=Avg('charge_per_km'))['avg_charge']
+
+
+            # Convert trip_distance to Decimal
+            trip_distance_decimal = Decimal(str(trip_distance))
+
+            # Calculate the cost based on the average charge_per_km and trip_distance
+            cost = round((average_charge_per_km * trip_distance_decimal), 2)
+
+            # Include cost in serializer data
+            response_data = serializer.data
+            response_data['cost'] = cost
+
+            return Response(response_data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -47,12 +89,17 @@ class AcceptOrderView(APIView):
     def post(self, request, *args, **kwargs):
         rider_email = request.data.get("rider_email")
         order_id = request.data.get("order_id")
-        order = get_object_or_404(Order, id=order_id)
+        price = request.data.get("price")
 
+        order = get_object_or_404(Order, id=order_id)
         rider = get_object_or_404(Rider, user__email=rider_email)
-        order_location = f"{order.pickup_long:.6f},{order.pickup_lat:.6f}"
+
+        pickup_lat = order.pickup_lat
+        pickup_long = order.pickup_long
         recipient_long = order.recipient_long
         recipient_lat = order.recipient_lat
+
+        order_location = f"{pickup_long:.6f},{pickup_lat:.6f}"
         recipient_location = f"{recipient_long:.6f},{recipient_lat:.6f}"
 
         conditions = [{"column": "rider_email", "value": rider_email}]
@@ -60,8 +107,6 @@ class AcceptOrderView(APIView):
 
         rider_data = supabase.get_supabase_riders(conditions=conditions, fields=fields)
 
-        rider_long, rider_lat = map(float, rider_data[0]["location"].split(","))
-        
         try:
             result = self.get_matrix_results(order_location, rider_data)
         except Exception as e:
@@ -74,7 +119,7 @@ class AcceptOrderView(APIView):
 
         distance_calc = DistanceCalculator(recipient_location)
         trip_distance = distance_calc.haversine_distance(
-            recipient_lat, recipient_long, rider_lat, rider_long
+            recipient_lat, recipient_long, pickup_lat, pickup_long
         )
 
         # Calculate the cost of the ride based on the distance of the trip
@@ -86,7 +131,7 @@ class AcceptOrderView(APIView):
         return Response(
             {
                 "rider": serializer.data,
-                "cost_of_ride": cost_of_ride,
+                "cost_of_ride": price if price else cost_of_ride,
                 "distance": distance,
                 "duration": duration,
             },
