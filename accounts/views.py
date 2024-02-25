@@ -1,4 +1,4 @@
-from django.db import transaction
+from django.db import transaction, IntegrityError
 from django.contrib.auth import authenticate
 from django.utils import timezone
 from map_clients.map_clients import MapClientsManager
@@ -7,6 +7,7 @@ from .tokens import create_jwt_pair_for_user
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.serializers import ValidationError
 from rest_framework import generics, status
 from .serializers import *
 from .models import *
@@ -26,6 +27,7 @@ supabase = SupabaseTransactions()
 
 class BaseRegistrationView(generics.CreateAPIView):
     serializer_class = None
+    user_model = None
 
     @transaction.atomic
     def post(self, request, *args, **kwargs):
@@ -47,6 +49,18 @@ class BaseRegistrationView(generics.CreateAPIView):
                     with transaction.atomic():
                         # Save the user and create a user object
                         user = user_serializer.save()
+
+                        # Create the Rider or Customer object
+                        self.user_model.objects.create(
+                            user=user,
+                            vehicle_registration_number=request.data[
+                                "vehicle_registration_number"
+                            ],
+                            min_capacity=request.data["min_capacity"],
+                            max_capacity=request.data["max_capacity"],
+                            fragile_item_allowed=request.data["fragile_item_allowed"],
+                            charge_per_km=request.data["charge_per_km"],
+                        )
 
                         # Serialize the user object
                         user_obj_serializer = self.serializer_class(
@@ -91,10 +105,12 @@ class BaseRegistrationView(generics.CreateAPIView):
 
 class RiderRegistrationView(BaseRegistrationView):
     serializer_class = RiderSerializer
+    user_model = Rider
 
 
 class CustomerRegistrationView(BaseRegistrationView):
     serializer_class = CustomerSerializer
+    user_model = Customer
 
 
 class VerifyEmailView(APIView):
@@ -127,18 +143,17 @@ class VerifyEmailView(APIView):
                 {"detail": "Invalid OTP token"}, status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Check if user_verification exists and the email has not expired
+        # Check if user_verification exists and the email_otp has not expired
         if user_verification and (
-            user_verification.otp_expiration_time > timezone.now()
-            and not user_verification.user.is_verified
+            not user_verification.has_expired and not user_verification.user.is_verified
         ):
             # Mark the user as verified
-            user_verification.user.is_verified = True
-            user_verification.user.save()
+            user = user_verification.user
+            user.is_verified = True
+            user.save()
 
             # Invalidate the OTP token
-            user_verification.otp = None
-            user_verification.otp_expiration_time = None
+            user_verification.used = True
             user_verification.save()
 
             return Response(
@@ -260,16 +275,14 @@ class UserPasswordResetView(APIView):
             )
 
         try:
-            user_verification = UserVerification.objects.get(
-                email_otp=otp_code, used=False
-            )
+            user_verification = UserVerification.objects.get(otp=otp_code, used=False)
         except UserVerification.DoesNotExist:
             return Response(
                 {"detail": "User not found or verification record missing"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if user_verification.expired:
+        if user_verification.has_expired:
             return Response(
                 {"detail": "OTP has expired, request new OTP"},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -284,7 +297,7 @@ class UserPasswordResetView(APIView):
         user = user_verification.user
         user.set_password(new_password)
         user.save()
-        
+
         user_verification.used = True
         user_verification.save()
 
@@ -293,19 +306,19 @@ class UserPasswordResetView(APIView):
         )
 
 
-
 class GetAvailableRidersView(APIView):
     permission_classes = [IsAuthenticated]
     SEARCH_RADIUS_KM = 5
 
     def validate_parameters(
-        self, origin_lat, origin_long, item_capacity, is_fragile, customer_email
+        self, origin_lat, origin_long, item_capacity, is_fragile, customer_email, price_offer
     ):
         """Validate input parameters."""
         try:
             origin_lat = float(origin_lat)
             origin_long = float(origin_long)
             item_capacity = float(item_capacity)
+            price_offer = float(price_offer)
             is_fragile = str_to_bool(is_fragile)
         except ValueError:
             return False, "Invalid or missing parameters"
@@ -313,7 +326,7 @@ class GetAvailableRidersView(APIView):
         if (
             not all(
                 isinstance(param, (float, int))
-                for param in [origin_lat, origin_long, item_capacity]
+                for param in [origin_lat, origin_long, item_capacity, price_offer]
             )
             or not isinstance(is_fragile, bool)
             or not isinstance(customer_email, str)
@@ -333,38 +346,50 @@ class GetAvailableRidersView(APIView):
         item_capacity = request.GET.get("item_capacity")
         is_fragile = request.GET.get("is_fragile")
         customer_email = request.GET.get("customer_email")
+        price_offer = request.GET.get("price")
 
         is_valid, validation_message = self.validate_parameters(
-            origin_lat, origin_long, item_capacity, is_fragile, customer_email
+            origin_lat, origin_long, item_capacity, is_fragile, customer_email, price_offer
         )
         if not is_valid:
             return Response(
                 {"status": "error", "message": validation_message}, status=400
             )
 
-        origin = (origin_lat, origin_long)
-        riders_location_data = self.get_supabase_rider()
+        origin = f"{origin_long},{origin_lat}"
+        fields = ["rider_email", "current_lat", "current_long"]
+        riders_location_data = supabase.get_supabase_riders(fields=fields)
 
         if riders_location_data and origin:
             calculator = DistanceCalculator(origin)
             location_within_radius = calculator.destinations_within_radius(
                 riders_location_data, self.SEARCH_RADIUS_KM
             )
-            try:
-                map_client = map_clients_manager.get_client()
-                results = map_client.get_distances_duration(
-                    origin, location_within_radius
-                )
-
+            if not location_within_radius:
                 supabase.send_customer_notification(
-                    customer=customer_email, message="Notifying riders close to you"
+                    customer=customer_email, message="No rider around you"
                 )
+            else:
+                try:
+                    results = self.get_matrix_results(origin, location_within_radius)
 
-                supabase.send_riders_notification(results)
-            except Exception as e:
-                map_clients_manager.switch_client()
-                logger.error(f"Error processing API request: {str(e)}")
+                except Exception as e:
+                    logger.error(f"Error processing API request: {str(e)}")
+                    map_clients_manager.switch_client()
+                    results = self.get_matrix_results(origin, location_within_radius)
+
+            supabase.send_customer_notification(
+                customer=customer_email, message="Notifying riders close to you"
+            )
+
+            supabase.send_riders_notification(results, price_offer)
 
         return Response(
             {"status": "success", "message": "Notification sent successfully"}
         )
+
+    def get_matrix_results(self, origin, destinations):
+        """Get results from Matrix API."""
+        map_client = map_clients_manager.get_client()
+        results = map_client.get_distances_duration(origin, destinations)
+        return results
