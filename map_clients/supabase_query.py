@@ -63,10 +63,10 @@ class SupabaseTransactions:
         except Exception as e:
             self.handle_error(e)
 
-    def send_customer_notification(self, customer, message):
+    def send_customer_notification(self, customer, message, price, rider_name):
         try:
             self.supabase.table(self.customers_table).update(
-                {"notification": message}
+                {"notification": message, "price": price, "rider_name": rider_name}
             ).eq("email", customer).execute()
         except Exception as e:
             self.handle_error(e)

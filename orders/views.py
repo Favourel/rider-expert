@@ -133,18 +133,20 @@ class AcceptOrderView(APIView):
         # Calculate the cost of the ride based on the distance of the trip
         cost_of_ride = round((float(rider.charge_per_km) * trip_distance), 2)
 
-        serializer = RiderSerializer(rider)
+        rider_price = price if price else cost_of_ride
 
-        # Return the rider's information
-        return Response(
-            {
-                "rider": serializer.data,
-                "cost_of_ride": price if price else cost_of_ride,
-                "distance": distance,
-                "duration": duration,
-            },
-            status=status.HTTP_200_OK,
+        message = f"{rider.user.get_full_name} has accepted your order at a price of {rider_price}. he is {distance} km and {duration} away"
+
+        order.rider = rider
+        order.status = "accepted"
+        order.save()
+
+        supabase.send_customer_notification(
+            customer=order.customer.user.email, message=message
         )
+
+        # Return a success message
+        return Response({"message": "Notification sent successfully"},status=status.HTTP_201_CREATED)
 
     def get_matrix_results(self, origin, destinations):
         """Get results from Matrix API."""
@@ -153,11 +155,11 @@ class AcceptOrderView(APIView):
         return results
 
 
-
 class AssignOrderToRiderView(APIView):
     """
     This view assigns an order to a rider.
     """
+
     permission_classes = [IsAuthenticated]
 
     @transaction.atomic
