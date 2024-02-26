@@ -32,6 +32,7 @@ class CreateOrderView(APIView):
 
     @transaction.atomic
     def post(self, request, *args, **kwargs):
+        print(request.data)
         serializer = OrderSerializer(data=request.data)
 
         recipient_lat = request.data.get("recipient_lat")
@@ -40,7 +41,7 @@ class CreateOrderView(APIView):
         pickup_lat = request.data.get("pickup_lat")
         pickup_long = request.data.get("pickup_long")
 
-        order_location = f"{pickup_long:.6f},{pickup_lat:.6f}"
+        order_location = f"{pickup_long},{pickup_lat}"
 
         if serializer.is_valid():
             serializer.validated_data["customer"] = request.user.customer
@@ -99,7 +100,8 @@ class AcceptOrderView(APIView):
         order_id = request.data.get("order_id")
         price = request.data.get("price")
 
-        order = get_object_or_404(Order, id=order_id)
+        # order = get_object_or_404(Order, id=order_id)
+        order = Order.objects.last()
         rider = get_object_or_404(Rider, user__email=rider_email)
 
         pickup_lat = order.pickup_lat
@@ -133,16 +135,13 @@ class AcceptOrderView(APIView):
         # Calculate the cost of the ride based on the distance of the trip
         cost_of_ride = round((float(rider.charge_per_km) * trip_distance), 2)
 
-        rider_price = price if price else cost_of_ride
-
-        message = f"{rider.user.get_full_name} has accepted your order at a price of {rider_price}. he is {distance} km and {duration} away"
-
-        order.rider = rider
-        order.status = "accepted"
-        order.save()
+        serializer = RiderSerializer(rider)
 
         supabase.send_customer_notification(
-            customer=order.customer.user.email, message=message
+            customer=order.customer.user.email,
+            message="Notifying riders close to you",
+            riderName=rider.user.first_name + " " + rider.user.last_name,
+            price=price,
         )
 
         # Return a success message

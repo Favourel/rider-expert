@@ -1,3 +1,4 @@
+from datetime import datetime
 from django.conf import settings
 import logging
 from supabase import create_client
@@ -36,7 +37,9 @@ class SupabaseTransactions:
             return [
                 {
                     "email": rider["rider_email"],
-                    "location": "{},{}".format(rider["current_long"], rider["current_lat"]),
+                    "location": "{},{}".format(
+                        rider["current_long"], rider["current_lat"]
+                    ),
                 }
                 for rider in response.data
             ]
@@ -50,11 +53,16 @@ class SupabaseTransactions:
                 distance = rider.get("distance")
                 duration = rider.get("duration")
                 if all([rider_email, distance is not None, duration is not None]):
-                    
+
                     broadcast_message = f"New Delivery Request: Order is {distance} km and {duration} away with price tag of {price}"
 
                     self.supabase.table(self.riders_table).update(
-                        {"broadcast_message": broadcast_message if message is None else message}
+                        {
+                            "broadcast_message": (
+                                broadcast_message if message is None else message
+                            ),
+                            "update_time": datetime.now().strftime("%m/%d/%Y,%H:%M:%S"),
+                        }
                     ).eq("rider_email", rider_email).execute()
                 else:
                     logger.warning(
@@ -63,10 +71,10 @@ class SupabaseTransactions:
         except Exception as e:
             self.handle_error(e)
 
-    def send_customer_notification(self, customer, message, price, rider_name):
+    def send_customer_notification(self, customer, message, riderName="", price=""):
         try:
             self.supabase.table(self.customers_table).update(
-                {"notification": message, "price": price, "rider_name": rider_name}
+                {"notification": message, "riderName": riderName, "Price": price}
             ).eq("email", customer).execute()
         except Exception as e:
             self.handle_error(e)
