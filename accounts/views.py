@@ -241,8 +241,23 @@ class LoginView(APIView):
         # Create JWT tokens for the authenticated user
         tokens = create_jwt_pair_for_user(user)
 
+        user_type = ""
+
+        try:
+            user.customer
+            user_type = "customer"
+        except AttributeError:
+            try:
+                user.rider
+                user_type = "rider"
+            except AttributeError:
+                pass
+
         # Return the tokens with a 200 OK status code
-        return Response(tokens, status=status.HTTP_200_OK)
+        return Response(
+            {**tokens, "user_type": user_type, "email": user.email},
+            status=status.HTTP_200_OK,
+        )
 
     def invalid_credentials_response(self):
         return Response(
@@ -311,8 +326,22 @@ class GetAvailableRidersView(APIView):
     SEARCH_RADIUS_KM = 5
 
     def validate_parameters(
-        self, origin_lat, origin_long, item_capacity, is_fragile, customer_email, price_offer
+        self,
+        origin_lat,
+        origin_long,
+        item_capacity,
+        is_fragile,
+        customer_email,
+        price_offer,
     ):
+        print(
+            origin_lat,
+            origin_long,
+            item_capacity,
+            is_fragile,
+            customer_email,
+            price_offer,
+        )
         """Validate input parameters."""
         try:
             origin_lat = float(origin_lat)
@@ -320,8 +349,9 @@ class GetAvailableRidersView(APIView):
             item_capacity = float(item_capacity)
             price_offer = float(price_offer)
             is_fragile = str_to_bool(is_fragile)
-        except ValueError:
-            return False, "Invalid or missing parameters"
+        except ValueError as e:
+            print(str(e))
+            return False, f"Invalid or missing parameters"
 
         if (
             not all(
@@ -349,7 +379,12 @@ class GetAvailableRidersView(APIView):
         price_offer = request.GET.get("price")
 
         is_valid, validation_message = self.validate_parameters(
-            origin_lat, origin_long, item_capacity, is_fragile, customer_email, price_offer
+            origin_lat,
+            origin_long,
+            item_capacity,
+            is_fragile,
+            customer_email,
+            price_offer,
         )
         if not is_valid:
             return Response(
@@ -377,10 +412,6 @@ class GetAvailableRidersView(APIView):
                     logger.error(f"Error processing API request: {str(e)}")
                     map_clients_manager.switch_client()
                     results = self.get_matrix_results(origin, location_within_radius)
-
-            supabase.send_customer_notification(
-                customer=customer_email, message="Notifying riders close to you"
-            )
 
             supabase.send_riders_notification(results, price_offer)
 
