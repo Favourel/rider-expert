@@ -27,6 +27,7 @@ class CreateOrderView(APIView):
 
     @transaction.atomic
     def post(self, request, *args, **kwargs):
+        print(request.data)
         serializer = OrderSerializer(data=request.data)
 
         recipient_lat = request.data.get("recipient_lat")
@@ -35,7 +36,7 @@ class CreateOrderView(APIView):
         pickup_lat = request.data.get("pickup_lat")
         pickup_long = request.data.get("pickup_long")
 
-        order_location = f"{pickup_long:.6f},{pickup_lat:.6f}"
+        order_location = f"{pickup_long},{pickup_lat}"
 
         if serializer.is_valid():
             serializer.validated_data["customer"] = request.user.customer
@@ -53,12 +54,15 @@ class CreateOrderView(APIView):
                 riders_location_data, self.SEARCH_RADIUS_KM
             )
 
-            rider_emails = [rider['email'] for rider in riders_within_radius]
+            rider_emails = [rider["email"] for rider in riders_within_radius]
 
             # Query Rider model to get charge_per_km for riders within radius
-            riders_within_radius_queryset = Rider.objects.filter(user__email__in=rider_emails)
-            average_charge_per_km = riders_within_radius_queryset.aggregate(avg_charge=Avg('charge_per_km'))['avg_charge']
-
+            riders_within_radius_queryset = Rider.objects.filter(
+                user__email__in=rider_emails
+            )
+            average_charge_per_km = riders_within_radius_queryset.aggregate(
+                avg_charge=Avg("charge_per_km")
+            )["avg_charge"]
 
             # Convert trip_distance to Decimal
             trip_distance_decimal = Decimal(str(trip_distance))
@@ -68,7 +72,7 @@ class CreateOrderView(APIView):
 
             # Include cost in serializer data
             response_data = serializer.data
-            response_data['cost'] = cost
+            response_data["cost"] = cost
 
             return Response(response_data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -91,7 +95,8 @@ class AcceptOrderView(APIView):
         order_id = request.data.get("order_id")
         price = request.data.get("price")
 
-        order = get_object_or_404(Order, id=order_id)
+        # order = get_object_or_404(Order, id=order_id)
+        order = Order.objects.last()
         rider = get_object_or_404(Rider, user__email=rider_email)
 
         pickup_lat = order.pickup_lat
@@ -126,6 +131,13 @@ class AcceptOrderView(APIView):
         cost_of_ride = round((float(rider.charge_per_km) * trip_distance), 2)
 
         serializer = RiderSerializer(rider)
+
+        supabase.send_customer_notification(
+            customer=order.customer.user.email,
+            message="Notifying riders close to you",
+            riderName=rider.user.first_name + " " + rider.user.last_name,
+            price=price,
+        )
 
         # Return the rider's information
         return Response(
