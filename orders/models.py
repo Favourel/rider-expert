@@ -24,21 +24,30 @@ class Order(models.Model):
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default="PendingPickup"
     )
-    recipients_name = models.CharField(max_length=100)
+    recipient_name = models.CharField(max_length=100)
     recipient_address = models.TextField()
     recipient_lat = models.FloatField(blank=True, null=True)
     recipient_long = models.FloatField(blank=True, null=True)
     recipient_phone_number = models.CharField(max_length=15)
     order_completion_code = models.CharField(max_length=10, blank=True, null=True)
-    parcel_weight = models.DecimalField(
+    weight = models.DecimalField(
         max_digits=5, decimal_places=2, validators=[MinValueValidator(0.01)]
     )
-    parcel_value = models.DecimalField(
+    quantity = models.PositiveIntegerField(null=True, blank=True)
+    value = models.DecimalField(
         max_digits=10, decimal_places=2, validators=[MinValueValidator(0.01)]
     )
     fragile = models.BooleanField(default=False)
     price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    creation_time = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"Order {self.pk} - {self.status}"
+
+
+class DeclinedOrder(models.Model):
+    order = models.OneToOneField(Order, on_delete=models.CASCADE)
+    customer = models.ForeignKey(Customer, on_delete=models.CASCADE, null=True, blank=True)
+    rider = models.ForeignKey(Rider, on_delete=models.CASCADE, null=True, blank=True)
+    decline_reason = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)

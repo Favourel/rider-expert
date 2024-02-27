@@ -49,6 +49,7 @@ class UserVerification(models.Model):
 
 class Customer(models.Model):
     user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, primary_key=True)
+    declined_requests = models.PositiveIntegerField(default=0)
 
     def __str__(self):
         return self.user.get_full_name
@@ -67,6 +68,8 @@ class Rider(models.Model):
         max_digits=6, decimal_places=2, null=True, blank=True
     )
     ratings = models.DecimalField(max_digits=3, decimal_places=2, null=True, blank=True)
+    declined_requests = models.PositiveIntegerField(default=0)
+    completed_orders = models.PositiveIntegerField(default=0)
 
     def __str__(self):
         return self.user.get_full_name
