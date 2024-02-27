@@ -83,12 +83,14 @@ class SupabaseTransactions:
         except Exception as e:
             self.handle_error(e)
 
-    def send_customer_notification(
-        self, customer, message, rider_info=None
-    ):
+    def send_customer_notification(self, customer, message, rider_info=None):
         try:
             self.supabase.table(self.customers_table).update(
-                {"notification": message, "rider_info": rider_info}
+                {
+                    "notification": message,
+                    "rider_info": rider_info,
+                    "updated_at": datetime.now().strftime("%m/%d/%Y,%H:%M:%S"),
+                }
             ).eq("email", customer).execute()
         except Exception as e:
             self.handle_error(e)
