@@ -47,7 +47,6 @@ class CreateOrderView(APIView):
 
         if serializer.is_valid():
             serializer.validated_data["customer"] = request.user.customer
-            serializer.save()
 
             fields = ["rider_email", "current_lat", "current_long"]
             riders_location_data = supabase.get_supabase_riders(fields=fields)
@@ -75,6 +74,8 @@ class CreateOrderView(APIView):
 
                 # Calculate the cost based on the average charge_per_km and trip_distance
                 cost = round((average_charge_per_km * trip_distance_decimal), 2)
+
+                serializer.save()
 
                 # Include cost in serializer data
                 response_data = serializer.data
@@ -219,7 +220,8 @@ class OrderDetailView(APIView):
 
 class AcceptOrDeclineOrderView(APIView):
     permission_classes = [IsAuthenticated]
-
+    
+    @transaction.atomic
     def post(self, request, *args, **kwargs):
         order_id = request.data.get("order_id")
         price = request.data.get("price")
