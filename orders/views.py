@@ -100,8 +100,8 @@ class GetAvailableRidersView(APIView):
         origin_long,
         item_weight,
         is_fragile,
-        customer_email,
         price_offer,
+        order_id
     ):
         """Validate input parameters."""
         try:
@@ -110,6 +110,7 @@ class GetAvailableRidersView(APIView):
             item_weight = float(item_weight)
             price_offer = float(price_offer)
             is_fragile = str_to_bool(is_fragile)
+            order_id = int(order_id)
         except ValueError as e:
             print(str(e))
             return False, f"Invalid or missing parameters"
@@ -117,10 +118,9 @@ class GetAvailableRidersView(APIView):
         if (
             not all(
                 isinstance(param, (float, int))
-                for param in [origin_lat, origin_long, item_weight, price_offer]
+                for param in [origin_lat, origin_long, item_weight, price_offer, order_id]
             )
             or not isinstance(is_fragile, bool)
-            or not isinstance(customer_email, str)
         ):
             return False, "Invalid or missing parameters"
         return True, ""
@@ -130,17 +130,18 @@ class GetAvailableRidersView(APIView):
         origin_lat = float(request.GET.get("origin_lat"))
         item_weight = request.GET.get("item_weight")
         is_fragile = request.GET.get("is_fragile")
-        customer_email = request.GET.get("customer_email")
         price_offer = request.GET.get("price")
         order_id = request.GET.get("order_id")
+
+        customer = request.user.customer
 
         is_valid, validation_message = self.validate_parameters(
             origin_lat,
             origin_long,
             item_weight,
             is_fragile,
-            customer_email,
             price_offer,
+            order_id
         )
         if not is_valid:
             return Response(
@@ -180,7 +181,7 @@ class GetAvailableRidersView(APIView):
             )
             if not location_within_radius:
                 supabase.send_customer_notification(
-                    customer=customer_email, message="No rider around you"
+                    customer=customer.user.email, message="No rider around you"
                 )
             else:
                 try:
