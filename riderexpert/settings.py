@@ -27,7 +27,7 @@ SUPABASE_URL = "https://qxplgfcshxuenfzrfjwi.supabase.co"
 
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF4cGxnZmNzaHh1ZW5menJmandpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDczNzg5NDYsImV4cCI6MjAyMjk1NDk0Nn0.FaC6oKiZ7qVLcOp6c8MLyomNJD4Cfxr22F9I6qVW5f8"
 
-
+PAYSTACK_SECRET_KEY = "sk_test_f6163c644f9984a4ab9915da56ac148098578689"
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.1/howto/deployment/checklist/
 

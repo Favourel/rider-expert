@@ -99,6 +99,9 @@ class CustomerSerializer(serializers.ModelSerializer):
 
 class RiderSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
+    account_number = serializers.CharField(max_length=10)
+    bank_code = serializers.CharField(max_length=10)
+    bvn = serializers.CharField(max_length=11)
 
     class Meta:
         model = Rider
@@ -111,4 +114,7 @@ class RiderSerializer(serializers.ModelSerializer):
             "fragile_item_allowed",
             "charge_per_km",
             "ratings",
+            "account_number",
+            "bank_code",
+            "bvn"
         )

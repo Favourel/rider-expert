@@ -1,6 +1,7 @@
 from django.db import transaction, IntegrityError
 from django.contrib.auth import authenticate
 from django.utils import timezone
+from accounts.paystack import PaystackServices
 from map_clients.map_clients import MapClientsManager
 from map_clients.supabase_query import SupabaseTransactions
 from .tokens import create_jwt_pair_for_user
@@ -51,16 +52,37 @@ class BaseRegistrationView(generics.CreateAPIView):
                         user = user_serializer.save()
 
                         # Create the Rider or Customer object
-                        self.user_model.objects.create(
-                            user=user,
-                            vehicle_registration_number=request.data[
-                                "vehicle_registration_number"
-                            ],
-                            min_capacity=request.data["min_capacity"],
-                            max_capacity=request.data["max_capacity"],
-                            fragile_item_allowed=request.data["fragile_item_allowed"],
-                            charge_per_km=request.data["charge_per_km"],
-                        )
+                        if self.user_model == Rider:
+                            paystack_api = PaystackServices(
+                                user.email,
+                                user.first_name,
+                                user.last_name,
+                                user.phone_number,
+                            )
+                            is_created = paystack_api.create_customer()
+                            (
+                                paystack_api.validate_customer(
+                                    request.data["account_number"],
+                                    request.data["bank_code"],
+                                    request.data["bvn"],
+                                )
+                                if is_created
+                                else None
+                            )
+                            self.user_model.objects.create(
+                                user=user,
+                                vehicle_registration_number=request.data[
+                                    "vehicle_registration_number"
+                                ],
+                                min_capacity=request.data["min_capacity"],
+                                max_capacity=request.data["max_capacity"],
+                                fragile_item_allowed=request.data[
+                                    "fragile_item_allowed"
+                                ],
+                                charge_per_km=request.data["charge_per_km"],
+                            )
+                        else:
+                            self.user_model.objects.create(user=user)
 
                         # Serialize the user object
                         user_obj_serializer = self.serializer_class(
@@ -94,10 +116,7 @@ class BaseRegistrationView(generics.CreateAPIView):
                 except Exception as e:
                     # Handle unexpected errors
                     logger.error(f"An unexpected error occurred: {e}")
-                    return Response(
-                        {"detail": "An unexpected error occurred."},
-                        status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    )
+                    raise e
         else:
             # Raise a validation error if the user serializer is not valid
             raise ValidationError(detail=user_serializer.errors)
