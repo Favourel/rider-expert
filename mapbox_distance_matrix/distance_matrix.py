@@ -43,6 +43,7 @@ class MapboxDistanceDuration:
                 distance = data["destinations"][1]["distance"]
                 duration = data["durations"][1][0]
                 formatted_duration = self.format_duration(duration)
+                distance = round(distance / 1000, 2)
                 results.append(
                     {
                         "email": rider_location["email"],
@@ -81,6 +82,8 @@ class MapboxDistanceDuration:
                         distance = destination["distance"]
                         duration = data["durations"][j][0]
                         formatted_duration = self.format_duration(duration)
+                        distance = round(distance / 1000, 2)
+
                         results.append(
                             {
                                 "email": batch_destinations[j - 1]["email"],

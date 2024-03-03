@@ -46,18 +46,34 @@ class SupabaseTransactions:
         except Exception as e:
             self.handle_error(e)
 
-    def send_riders_notification(self, riders, price):
+    def send_riders_notification(
+        self,
+        riders,
+        price=None,
+        message=None,
+        request_coordinates=None,
+        order_id=None,
+        order_info=None,
+    ):
         try:
             for rider in riders:
                 rider_email = rider.get("email")
                 distance = rider.get("distance")
                 duration = rider.get("duration")
                 if all([rider_email, distance is not None, duration is not None]):
-                    message = f"New Delivery Request: Order is {distance} m and {duration} away with price tag of {price}"
+
+                    broadcast_message = f"New Delivery Request: Order is {distance} km and {duration} away with price tag of {price}"
+
                     self.supabase.table(self.riders_table).update(
                         {
-                            "broadcast_message": message,
+                            "broadcast_message": (
+                                broadcast_message if message is None else message
+                            ),
                             "update_time": datetime.now().strftime("%m/%d/%Y,%H:%M:%S"),
+                            "order_id": order_id,
+                            "price": price,
+                            "request_coordinates": request_coordinates,
+                            "order_info": order_info,
                         }
                     ).eq("rider_email", rider_email).execute()
                 else:
@@ -67,10 +83,14 @@ class SupabaseTransactions:
         except Exception as e:
             self.handle_error(e)
 
-    def send_customer_notification(self, customer, message, riderName="", price=""):
+    def send_customer_notification(self, customer, message, rider_info=None):
         try:
             self.supabase.table(self.customers_table).update(
-                {"notification": message, "riderName": riderName, "Price": price}
+                {
+                    "notification": message,
+                    "rider_info": rider_info,
+                    "updated_at": datetime.now().strftime("%m/%d/%Y,%H:%M:%S"),
+                }
             ).eq("email", customer).execute()
         except Exception as e:
             self.handle_error(e)
