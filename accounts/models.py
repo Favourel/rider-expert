@@ -8,7 +8,6 @@ from .managers import CustomUserManager
 from django.core.validators import EmailValidator
 
 
-
 email_validator = EmailValidator(message="Enter a valid email address.")
 
 
@@ -29,7 +28,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     REQUIRED_FIELDS = ["first_name", "last_name"]
 
     def __str__(self):
-        return self.email
+        return self.get_full_name
 
     @property
     def get_full_name(self):
@@ -50,9 +49,10 @@ class UserVerification(models.Model):
 
 class Customer(models.Model):
     user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, primary_key=True)
+    declined_requests = models.PositiveIntegerField(default=0)
 
     def __str__(self):
-        return self.user.email
+        return self.user.get_full_name
 
 
 class Rider(models.Model):
@@ -68,6 +68,8 @@ class Rider(models.Model):
         max_digits=6, decimal_places=2, null=True, blank=True
     )
     ratings = models.DecimalField(max_digits=3, decimal_places=2, null=True, blank=True)
+    declined_requests = models.PositiveIntegerField(default=0)
+    completed_orders = models.PositiveIntegerField(default=0)
 
     def __str__(self):
-        return self.user.email
+        return self.user.get_full_name

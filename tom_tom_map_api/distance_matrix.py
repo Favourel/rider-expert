@@ -94,6 +94,8 @@ class TomTomDistanceMatrix:
                     distance = route_summary.get("lengthInMeters", 0)
                     duration = route_summary.get("travelTimeInSeconds", 0)
 
+                    distance = round(distance / 1000, 2)
+
                     formatted_duration = self.format_duration(duration)
                     results.append(
                         {

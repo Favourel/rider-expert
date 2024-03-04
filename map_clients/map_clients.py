@@ -47,7 +47,7 @@ class Mapbox(MapClients):
     ):
         """
         A method that uses retry decorator to make multiple attempts to get distances and durations between two locations using MapBox API.
-        
+
         :param origin: The origin of the distance calculation.
         :type origin: str
         :param destination: The destination of the distance calculation.
@@ -81,11 +81,11 @@ class TomTom(MapClients):
     ):
         """
         A method that uses retry decorator to make multiple attempts to get distances and durations between two locations using TomTom API.
-        
+
         Parameters:
             origin (str): The starting location.
             destination (str): The destination location.
-        
+
         Returns:
             func: the get_async_response method of the tomtom client
         """
@@ -137,3 +137,19 @@ class MapClientsManager:
             self.map_client.current_map_client = next_client_name
             self.map_client.save()
             logger.info(f"Switched to {next_client_name}, {self.client_name} is down")
+
+
+def get_distance(origin, destination):
+    api = settings.MAPBOX_API_KEY
+    url = f"https://api.mapbox.com/directions/v5/mapbox/driving-traffic/{origin};{destination}?access_token={api}"
+
+    response = requests.get(url)
+
+    if response.status_code == 200:
+        data = response.json()
+        distance = data["routes"][0]["distance"]
+        return round((distance / 1000), 2)
+    else:
+        raise Exception(
+            f"Failed to get response. Status code: {response.status_code}. Error: {response.text}"
+        )
