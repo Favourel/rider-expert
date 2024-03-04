@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     "orders",
     "adrf",
     "map_clients",
+    "wallet",
 ]
 
 MIDDLEWARE = [
