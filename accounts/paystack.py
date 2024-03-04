@@ -25,7 +25,7 @@ class PaystackServices:
         response = requests.post(self.base_url, headers=self.headers, json=data)
         response.raise_for_status()
         data = response.json()
-        return data["status"]
+        return data
 
     def validate_customer(self, account_number, bank_code, bvn):
 

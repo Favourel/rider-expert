@@ -4,6 +4,7 @@ from django.utils import timezone
 from accounts.paystack import PaystackServices
 from map_clients.map_clients import MapClientsManager
 from map_clients.supabase_query import SupabaseTransactions
+from wallet.models import Wallet
 from .tokens import create_jwt_pair_for_user
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -44,14 +45,31 @@ class BaseRegistrationView(generics.CreateAPIView):
                         user = user_serializer.save()
 
                         # Create the Rider or Customer object
+                        paystack_api = PaystackServices(
+                            user.email,
+                            user.first_name,
+                            user.last_name,
+                            user.phone_number,
+                        )
+                        paystack_user = paystack_api.create_customer()
+                        self.user_model.objects.create(
+                            user=user,
+                            vehicle_registration_number=request.data[
+                                "vehicle_registration_number"
+                            ],
+                            min_capacity=request.data["min_capacity"],
+                            max_capacity=request.data["max_capacity"],
+                            fragile_item_allowed=request.data["fragile_item_allowed"],
+                            charge_per_km=request.data["charge_per_km"],
+                        )
+
+                        is_created = paystack_user["status"]
+                        paystack_user_data = paystack_user["data"]
+                        Wallet.objects.create(
+                            user=user,
+                            code=paystack_user_data["customer_code"],
+                        )
                         if self.user_model == Rider:
-                            paystack_api = PaystackServices(
-                                user.email,
-                                user.first_name,
-                                user.last_name,
-                                user.phone_number,
-                            )
-                            is_created = paystack_api.create_customer()
                             (
                                 paystack_api.validate_customer(
                                     request.data["account_number"],
@@ -61,20 +79,6 @@ class BaseRegistrationView(generics.CreateAPIView):
                                 if is_created
                                 else None
                             )
-                            self.user_model.objects.create(
-                                user=user,
-                                vehicle_registration_number=request.data[
-                                    "vehicle_registration_number"
-                                ],
-                                min_capacity=request.data["min_capacity"],
-                                max_capacity=request.data["max_capacity"],
-                                fragile_item_allowed=request.data[
-                                    "fragile_item_allowed"
-                                ],
-                                charge_per_km=request.data["charge_per_km"],
-                            )
-                        else:
-                            self.user_model.objects.create(user=user)
 
                         # Serialize the user object
                         user_obj_serializer = self.serializer_class(
