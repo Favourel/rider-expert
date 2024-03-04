@@ -24,6 +24,6 @@ urlpatterns = [
     path("login/", views.LoginView.as_view(), name="login"),
     path(
         "reset_password/", views.UserPasswordResetView.as_view(), name="reset_password"
-    )
-
+    ),
+    path("verify-rider/", views.VerifyRiderView.as_view(), name="verify-rider"),
 ]
