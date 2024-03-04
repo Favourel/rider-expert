@@ -44,7 +44,7 @@ class PaystackServices:
         response = requests.post(url, headers=self.headers, json=params)
         response.raise_for_status()
         data = response.json()
-        return data["status"]
+        return data
 
     def fetch_customer(self, email_or_code):
         url = f"{self.base_url}/:{email_or_code}"

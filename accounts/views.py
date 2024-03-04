@@ -247,9 +247,18 @@ class LoginView(APIView):
         if user is None:
             return self.invalid_credentials_response()
 
+        if hasattr(user, "rider_profile"):
+            paystack_user = PaystackServices().fetch_customer(email)
+            is_identified = paystack_user["identified"]
+            RiderVerification.objects.get_or_create(
+                rider=user.rider_profile, paystack_account_verification=is_identified
+            )
+            if not is_identified:
+                return self.unverified_response("Identity not verified.")
+
         # Check if user's email is not verified
         if not user.is_verified:
-            return self.unverified_email_response()
+            return self.unverified_response("Email is not verified.")
 
         # Create JWT tokens for the authenticated user
         tokens = create_jwt_pair_for_user(user)
@@ -278,11 +287,64 @@ class LoginView(APIView):
             status=status.HTTP_401_UNAUTHORIZED,
         )
 
-    def unverified_email_response(self):
+    def unverified_response(self, message):
         return Response(
-            {"detail": "Email is not verified."},
+            {"detail": message},
             status=status.HTTP_401_UNAUTHORIZED,
         )
+
+
+class VerifyRiderView(APIView):
+    def post(self, request, *args, **kwargs):
+        email = request.data.get("email")
+        account_number = request.data.get("account_number")
+        bank_code = request.data.get("bank_code")
+        bvn = request.data.get("bvn")
+
+        if not email:
+            return Response(
+                {"detail": "Email is required"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        rider = Rider.objects.filter(user__email=email).first()
+        if not rider:
+            return Response(
+                {"detail": "Rider not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        rider_verification, created = RiderVerification.objects.get_or_create(
+            rider=rider
+        )
+
+        if rider_verification.paystack_account_verification:
+            return Response(
+                {"detail": "Rider is already verified"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not account_number or not bank_code or not bvn:
+            return Response(
+                {"detail": "Account number, bank code and bvn are required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        paystack_services = PaystackServices(
+            email=email,
+            first_name=rider.user.first_name,
+            last_name=rider.user.last_name,
+            phone_number=rider.user.phone_number,
+        )
+        is_valid, error_message = paystack_services.validate_customer(
+            account_number=account_number, bank_code=bank_code, bvn=bvn
+        )
+        if is_valid:
+            rider_verification.paystack_account_verification = True
+            rider_verification.save()
+            return Response(
+                {"detail": "Rider verification successful"}, status=status.HTTP_200_OK
+            )
+        else:
+            return Response(
+                {"detail": error_message},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
 
 class UserPasswordResetView(APIView):
