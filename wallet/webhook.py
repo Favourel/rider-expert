@@ -11,7 +11,7 @@ from accounts.models import CustomUser
 from wallet.models import WalletTransaction, Wallet
 
 logger = logging.getLogger(__name__)
-secret = settings.PAYSTACK_TEST_SECRETE_KEY
+secret = settings.PAYSTACK_SECRETE_KEY
 
 
 class PaystackWebhookView(APIView):
