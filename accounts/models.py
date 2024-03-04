@@ -73,3 +73,9 @@ class Rider(models.Model):
 
     def __str__(self):
         return self.user.get_full_name
+
+
+class RiderVerification(models.Model):
+    rider = models.OneToOneField(Rider, on_delete=models.CASCADE)
+    paystack_account_verification = models.BooleanField(default=False)
+    

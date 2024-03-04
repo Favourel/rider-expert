@@ -1,6 +1,7 @@
 from django.db import models
 from accounts.models import CustomUser
 
+
 class Wallet(models.Model):
     code = models.CharField(max_length=20, unique=True)
     user = models.OneToOneField(CustomUser, on_delete=models.CASCADE)
@@ -8,10 +9,11 @@ class Wallet(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+
 class WalletTransaction(models.Model):
     TRANSACTION_CHOICES = [
-        ('credit', 'Credit'),
-        ('debit', 'Debit'),
+        ("credit", "Credit"),
+        ("debit", "Debit"),
     ]
 
     wallet = models.ForeignKey(Wallet, on_delete=models.CASCADE)
