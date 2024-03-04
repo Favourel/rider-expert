@@ -2,8 +2,6 @@ from django.db import transaction, IntegrityError
 from django.contrib.auth import authenticate
 from django.utils import timezone
 from accounts.paystack import PaystackServices
-from map_clients.map_clients import MapClientsManager
-from map_clients.supabase_query import SupabaseTransactions
 from wallet.models import Wallet
 from .tokens import create_jwt_pair_for_user
 from rest_framework.views import APIView
