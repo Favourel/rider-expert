@@ -28,7 +28,6 @@ class CreateOrderView(APIView):
 
     @transaction.atomic
     def post(self, request, *args, **kwargs):
-        print(request.data)
         serializer = OrderSerializer(data=request.data)
 
         recipient_lat = request.data.get("recipient_lat")
@@ -107,8 +106,8 @@ class GetAvailableRidersView(APIView):
             is_fragile = str_to_bool(is_fragile)
             order_id = int(order_id)
         except ValueError as e:
-            print(str(e))
-            return False, f"Invalid or missing parameters"
+            logger.error(e)
+            return False, f"Invalid or missing parameters, {e}"
 
         if (
             not all(
