@@ -1,7 +1,6 @@
+from django.utils import timezone
 from decimal import Decimal
-from time import timezone
 from accounts.models import Rider
-from accounts.serializers import RiderSerializer
 from django.db import transaction
 from django.db.models import Avg
 from django.shortcuts import get_object_or_404
@@ -12,9 +11,7 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-from rest_framework import status
+from wallet.models import PendingWalletTransaction, WalletTransaction
 from .models import DeclinedOrder, Order
 from accounts.models import Rider
 from .serializers import OrderSerializer, OrderDetailSerializer
@@ -33,7 +30,6 @@ class CreateOrderView(APIView):
 
     @transaction.atomic
     def post(self, request, *args, **kwargs):
-        print(request.data)
         serializer = OrderSerializer(data=request.data)
 
         recipient_lat = request.data.get("recipient_lat")
@@ -95,13 +91,7 @@ class GetAvailableRidersView(APIView):
     SEARCH_RADIUS_KM = 5
 
     def validate_parameters(
-        self,
-        origin_lat,
-        origin_long,
-        item_weight,
-        is_fragile,
-        price_offer,
-        order_id
+        self, origin_lat, origin_long, item_weight, is_fragile, price_offer, order_id
     ):
         """Validate input parameters."""
         try:
@@ -112,16 +102,13 @@ class GetAvailableRidersView(APIView):
             is_fragile = str_to_bool(is_fragile)
             order_id = int(order_id)
         except ValueError as e:
-            print(str(e))
-            return False, f"Invalid or missing parameters"
+            logger.error(e)
+            return False, f"Invalid or missing parameters, {e}"
 
-        if (
-            not all(
-                isinstance(param, (float, int))
-                for param in [origin_lat, origin_long, item_weight, price_offer, order_id]
-            )
-            or not isinstance(is_fragile, bool)
-        ):
+        if not all(
+            isinstance(param, (float, int))
+            for param in [origin_lat, origin_long, item_weight, price_offer, order_id]
+        ) or not isinstance(is_fragile, bool):
             return False, "Invalid or missing parameters"
         return True, ""
 
@@ -136,12 +123,7 @@ class GetAvailableRidersView(APIView):
         customer = request.user.customer
 
         is_valid, validation_message = self.validate_parameters(
-            origin_lat,
-            origin_long,
-            item_weight,
-            is_fragile,
-            price_offer,
-            order_id
+            origin_lat, origin_long, item_weight, is_fragile, price_offer, order_id
         )
         if not is_valid:
             return Response(
@@ -221,7 +203,7 @@ class OrderDetailView(APIView):
 
 class AcceptOrDeclineOrderView(APIView):
     permission_classes = [IsAuthenticated]
-    
+
     @transaction.atomic
     def post(self, request, *args, **kwargs):
         order_id = request.data.get("order_id")
@@ -325,7 +307,13 @@ class AssignOrderToRiderView(APIView):
         rider_email = request.data.get("rider_email")
         order_id = request.data.get("order_id")
         price = request.data.get("price")
+        wallet = request.user.wallet
 
+        if wallet.balance < price:
+            return Response(
+                {"error": "Insufficient balance"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         try:
             # Get the order and rider objects
             order = get_object_or_404(Order, id=order_id)
@@ -387,7 +375,20 @@ class AssignOrderToRiderView(APIView):
 
             # Update the order price and save the order
             order.price = price
+            wallet.balance -= price
+            wallet.updated_at = timezone.now()
+            wallet.save()
             order.save()
+
+            WalletTransaction.objects.create(
+                wallet=wallet,
+                transaction_type="Debit",
+                amount=price,
+                transaction_status="pending",
+                created_at=timezone.now(),
+            )
+
+            PendingWalletTransaction.objects.create(user=request.user, amount=price)
 
             customer_message = f"Order Assigned successfully: {rider.user.get_full_name} is {distance} km and {duration} away"
 
