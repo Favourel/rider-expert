@@ -5,7 +5,7 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from .models import WalletTransaction
 
-from .serializers import WalletSerializer
+from .serializers import WalletSerializer, WalletTransactionSerializer
 
 
 class GetWalletBalanceView(APIView):
@@ -13,8 +13,18 @@ class GetWalletBalanceView(APIView):
 
     def get(self, request, *args, **kwargs):
         wallet = request.user.wallet
-        serializer = WalletSerializer(wallet)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        wallet_serializer = WalletSerializer(wallet)
+        transactions = WalletTransaction.objects.filter(wallet=wallet)
+        transactions_serializer = WalletTransactionSerializer(transactions, many=True)
+        return Response(
+            {
+                "message": {
+                    "Balance ": wallet_serializer.data,
+                    "Transactions ": transactions_serializer.data,
+                }
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class DebitWalletBalanceView(APIView):
@@ -31,7 +41,7 @@ class DebitWalletBalanceView(APIView):
                 {"error": "Insufficient balance"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        
+
         wallet.balance -= amount
         wallet.updated_at = timezone.now()
         wallet.save()
