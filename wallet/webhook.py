@@ -50,7 +50,7 @@ class PaystackWebhookView(APIView):
                         code=customer.get("customer_code"),
                         created_at=data.get("created_at"),
                     )
-                    wallet_transaction = WalletTransaction.objects.create(
+                    WalletTransaction.objects.create(
                         wallet=wallet,
                         amount=data.get("amount"),
                         transaction_reference=data.get("reference"),
@@ -77,11 +77,11 @@ class PaystackWebhookView(APIView):
         else:
             try:
                 bank_transfer = data.get("bank_transfer")
-                wallet_transaction = WalletTransaction.objects.create(
+                WalletTransaction.objects.create(
                     amount=data.get("amount") or bank_transfer.get("amount"),
                     transaction_reference=data.get("reference"),
                     transaction_id=data.get("id") or bank_transfer.get("id"),
-                    transaction_status=data.get("status") or "Failed",
+                    transaction_status=data.get("status") or "failed",
                     created_at=data.get("created_at") or timezone.now(),
                 )
                 return Response({"message": bank_transfer.get("message")}, status=400)

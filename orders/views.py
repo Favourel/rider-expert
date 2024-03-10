@@ -321,7 +321,7 @@ class AssignOrderToRiderView(APIView):
 
             # Assign the rider to the order and update the order status
             order.rider = rider
-            order.status = "Waiting for pickup"
+            order.status = "WaitingForPickup"
 
             # Get the order location
             order_location = f"{order.pickup_long},{order.pickup_lat}"
@@ -382,7 +382,7 @@ class AssignOrderToRiderView(APIView):
 
             WalletTransaction.objects.create(
                 wallet=wallet,
-                transaction_type="Debit",
+                transaction_type="debit",
                 amount=price,
                 transaction_status="pending",
                 created_at=timezone.now(),
@@ -402,3 +402,33 @@ class AssignOrderToRiderView(APIView):
         map_client = map_clients_manager.get_client()
         results = map_client.get_distances_duration(origin, destinations)
         return results
+
+
+class UpdateOrderStatusView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        order_id = request.data.get("order_id")
+        order_status = request.data.get("status")
+
+        if not order_id or not order_status:
+            return Response(
+                {"error": "Both order_id and status are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        valid_statuses = [choice[0] for choice in Order.STATUS_CHOICES]
+        if order_status not in valid_statuses:
+            return Response(
+                {"error": f"Invalid status: {order_status}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        order = get_object_or_404(Order, id=order_id)
+        order.status = order_status
+        order.save()
+
+        return Response(
+            {"message": f"Order status updated to {order_status}."},
+            status=status.HTTP_200_OK,
+        )

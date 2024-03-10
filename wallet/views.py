@@ -47,7 +47,7 @@ class DebitWalletBalanceView(APIView):
 
         WalletTransaction.objects.create(
             wallet=wallet,
-            transaction_type="Debit",
+            transaction_type="debit",
             amount=amount,
             created_at=timezone.now(),
         )
