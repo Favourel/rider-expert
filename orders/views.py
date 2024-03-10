@@ -388,11 +388,7 @@ class AssignOrderToRiderView(APIView):
                 created_at=timezone.now(),
             )
 
-            PendingWalletTransaction.objects.create(
-                user=request.user,
-                amount=price,
-                transaction_status="pending"
-            )
+            PendingWalletTransaction.objects.create(user=request.user, amount=price)
 
             customer_message = f"Order Assigned successfully: {rider.user.get_full_name} is {distance} km and {duration} away"
 
