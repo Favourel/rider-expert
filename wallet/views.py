@@ -59,7 +59,7 @@ class DebitWalletBalanceView(APIView):
         )
 
 
-class CreditRiderWalletBalanceView(APIView):
+class CreditRiderWalletView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
