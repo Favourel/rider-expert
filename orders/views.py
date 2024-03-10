@@ -1,7 +1,5 @@
 from decimal import Decimal
-from time import timezone
 from accounts.models import Rider
-from accounts.serializers import RiderSerializer
 from django.db import transaction
 from django.db.models import Avg
 from django.shortcuts import get_object_or_404
@@ -12,9 +10,6 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-from rest_framework import status
 from .models import DeclinedOrder, Order
 from accounts.models import Rider
 from .serializers import OrderSerializer, OrderDetailSerializer
@@ -325,7 +320,13 @@ class AssignOrderToRiderView(APIView):
         rider_email = request.data.get("rider_email")
         order_id = request.data.get("order_id")
         price = request.data.get("price")
-
+        wallet = request.user.wallet
+        
+        if wallet.balance < price:
+            return Response(
+                {"error": "Insufficient balance"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         try:
             # Get the order and rider objects
             order = get_object_or_404(Order, id=order_id)
