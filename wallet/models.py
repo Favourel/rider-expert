@@ -1,5 +1,6 @@
 from django.db import models
 from accounts.models import CustomUser
+from orders.models import Order
 
 
 class Wallet(models.Model):
@@ -44,6 +45,7 @@ class PendingWalletTransaction(models.Model):
         ("refunded", "Refunded"),
     ]
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
+    order = models.OneToOneField(Order, on_delete=models.CASCADE)
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     transaction_status = models.CharField(
         max_length=30, choices=TRANSACTION_STATUSES, default="pending"
