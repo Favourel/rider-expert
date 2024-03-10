@@ -7,11 +7,12 @@ from django.db import transaction
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.response import Response
+from rest_framework.views import APIView
 from accounts.models import CustomUser
 from wallet.models import WalletTransaction, Wallet
 
 logger = logging.getLogger(__name__)
-secret = settings.PAYSTACK_SECRETE_KEY
+secret = settings.PAYSTACK_SECRET_KEY
 
 
 class PaystackWebhookView(APIView):
@@ -63,7 +64,9 @@ class PaystackWebhookView(APIView):
                     wallet.balance += data.get("amount")
                     wallet.updated_at = data.get("paid_at")
                     wallet.save()
-                return Response({"message": "Webhook processed successfully"}, status=200)
+                return Response(
+                    {"message": "Webhook processed successfully"}, status=200
+                )
             except CustomUser.DoesNotExist:
                 return Response({"error": "User not found"}, status=404)
             except Wallet.DoesNotExist:

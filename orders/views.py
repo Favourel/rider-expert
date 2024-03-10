@@ -11,7 +11,7 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from wallet.models import WalletTransaction
+from wallet.models import PendingWalletTransaction, WalletTransaction
 from .models import DeclinedOrder, Order
 from accounts.models import Rider
 from .serializers import OrderSerializer, OrderDetailSerializer
@@ -384,7 +384,14 @@ class AssignOrderToRiderView(APIView):
                 wallet=wallet,
                 transaction_type="Debit",
                 amount=price,
+                transaction_status="pending",
                 created_at=timezone.now(),
+            )
+
+            PendingWalletTransaction.objects.create(
+                user=request.user,
+                amount=price,
+                transaction_status="pending"
             )
 
             customer_message = f"Order Assigned successfully: {rider.user.get_full_name} is {distance} km and {duration} away"
