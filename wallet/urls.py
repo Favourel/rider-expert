@@ -12,4 +12,9 @@ urlpatterns = [
         DebitWalletBalanceView.as_view(),
         name="debit-wallet-balance",
     ),
+    path(
+        "credit-rider-wallet/",
+        CreditRiderWalletView.as_view(),
+        name="credit-rider-wallet",
+    ),
 ]
