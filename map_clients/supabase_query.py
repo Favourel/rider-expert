@@ -1,3 +1,4 @@
+from riderexpert.celery import shared_task
 from datetime import datetime
 from django.conf import settings
 import logging
@@ -46,6 +47,7 @@ class SupabaseTransactions:
         except Exception as e:
             self.handle_error(e)
 
+    @shared_task
     def send_riders_notification(
         self,
         riders,
@@ -83,6 +85,7 @@ class SupabaseTransactions:
         except Exception as e:
             self.handle_error(e)
 
+    @shared_task
     def send_customer_notification(self, customer, message, rider_info=None):
         try:
             self.supabase.table(self.customers_table).update(

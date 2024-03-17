@@ -85,7 +85,7 @@ class BaseRegistrationView(generics.CreateAPIView):
 
                         if user_obj_serializer:
                             # Send a welcome email or perform any additional actions
-                            send_verification_email(user, "registration")
+                            send_verification_email.delay(user, "registration")
 
                             # Return a response with the serialized user object and a success message
                             return Response(
@@ -212,7 +212,7 @@ class ResendTokenView(APIView):
             )
 
         # Send the new OTP via email
-        send_verification_email(user_verification.user)
+        send_verification_email.delay(user_verification.user)
 
         return Response(
             {"detail": "New OTP has been sent to your email"}, status=status.HTTP_200_OK

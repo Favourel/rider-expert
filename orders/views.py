@@ -4,7 +4,7 @@ from accounts.models import Rider
 from django.db import transaction
 from django.db.models import Avg
 from django.shortcuts import get_object_or_404
-from accounts.utils import DistanceCalculator, str_to_bool
+from accounts.utils import DistanceCalculator, generate_otp, str_to_bool
 from map_clients.map_clients import MapClientsManager, get_distance
 from map_clients.supabase_query import SupabaseTransactions
 from rest_framework import status
@@ -162,7 +162,7 @@ class GetAvailableRidersView(APIView):
                 riders, self.SEARCH_RADIUS_KM
             )
             if not location_within_radius:
-                supabase.send_customer_notification(
+                supabase.send_customer_notification.delay(
                     customer=customer.user.email, message="No rider around you"
                 )
             else:
@@ -174,7 +174,7 @@ class GetAvailableRidersView(APIView):
                     map_clients_manager.switch_client()
                     results = self.get_matrix_results(origin, location_within_radius)
 
-            supabase.send_riders_notification(
+            supabase.send_riders_notification.delay(
                 results,
                 price=price_offer,
                 request_coordinates={"long": origin_long, "lat": origin_lat},
@@ -255,7 +255,7 @@ class AcceptOrDeclineOrderView(APIView):
                 "order_completed": rider.completed_orders,
                 "price": price if price else cost_of_ride,
             }
-            supabase.send_customer_notification(
+            supabase.send_customer_notification.delay(
                 customer=order.customer.user.email,
                 message="Notifying riders close to you",
                 rider_info=rider_info,
@@ -369,12 +369,16 @@ class AssignOrderToRiderView(APIView):
             rider_message = (
                 f"Order Accepted: Order is {distance} km and {duration} away"
             )
-            supabase.send_riders_notification(
+            supabase.send_riders_notification.delay(
                 result, message=rider_message, order_info=response_data
             )
 
+            # Generate order_completion code
+            code = generate_otp(length=4)
+
             # Update the order price and save the order
             order.price = price
+            order.order_completion_code = code
             wallet.balance -= price
             wallet.updated_at = timezone.now()
             wallet.save()
@@ -392,7 +396,7 @@ class AssignOrderToRiderView(APIView):
                 user=request.user, order=order, amount=price
             )
 
-            customer_message = f"Order Assigned successfully: {rider.user.get_full_name} is {distance} km and {duration} away"
+            customer_message = f"Order Assigned successfully: {rider.user.get_full_name} is {distance} km and {duration} away. Order code: {code}"
 
             return Response({"message": customer_message}, status=status.HTTP_200_OK)
         except (Rider.DoesNotExist, Order.DoesNotExist):
@@ -412,6 +416,7 @@ class UpdateOrderStatusView(APIView):
     def post(self, request, *args, **kwargs):
         order_id = request.data.get("order_id")
         order_status = request.data.get("status")
+        order_code = request.data.get("order_code")
 
         if not order_id or not order_status:
             return Response(
@@ -426,7 +431,22 @@ class UpdateOrderStatusView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        if order_status == "Delivered" and not order_code:
+            return Response(
+                {"error": "order_code is required for Delivered status."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Check if the order exists
         order = get_object_or_404(Order, id=order_id)
+
+        # Verify order code if required
+        if order_status == "Delivered" and order.order_completion_code != order_code:
+            return Response(
+                {"error": "Invalid order code."}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Update order status
         order.status = order_status
         order.save()
 

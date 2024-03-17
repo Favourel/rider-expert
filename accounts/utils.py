@@ -1,3 +1,4 @@
+from riderexpert.celery import shared_task
 from django.utils import timezone
 from django.core.mail import send_mail
 from smtplib import SMTPException
@@ -101,14 +102,32 @@ def retry(ExceptionToCheck=Exception, tries=3, delay=1, backoff=2, logger=None):
     return deco_retry
 
 
-def generate_otp():
+def generate_otp(length=6):
+    """
+    Generate a time-based OTP with the specified length.
+
+    Args:
+        length (int): The length of the OTP code (default is 6).
+
+    Returns:
+        str: The generated OTP code.
+    """
+    if length not in [4, 6]:
+        raise ValueError("OTP length must be either 4 or 6")
+
     # Generate a time-based OTP using PyOTP
     totp = pyotp.TOTP(pyotp.random_base32())
     otp_value = totp.now()
+
+    # Trim the OTP value to the specified length
+    otp_value = otp_value[:length]
+
     return otp_value
 
 
-def send_verification_email(user, purpose):
+
+@shared_task
+def send_verification_email(user, purpose=None):
     otp_code = generate_otp()
     current_site = "myAuth.com"
 
@@ -122,6 +141,12 @@ def send_verification_email(user, purpose):
         email_body = "Hi {} you requested a password reset on {} \nplease reset your password with the one-time code {}".format(
             user.first_name, current_site, otp_code
         )
+    else:
+        subject = "One time passcode for Email verification"
+        email_body = "Hi {} you requested to resend the verification email on {} \nplease verify your email with the one time code {}".format(
+            user.first_name, current_site, otp_code
+        )
+
     email = user.email
     from_email = settings.DEFAULT_FROM_EMAIL
 
@@ -138,7 +163,6 @@ def send_verification_email(user, purpose):
         created_at=time_now,
         otp_expiration_time=time_now + timezone.timedelta(minutes=30),
     )
-
 
 def str_to_bool(s):
     return s.lower() in ["true", "1", "yes", "on"]
