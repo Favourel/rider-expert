@@ -1,4 +1,4 @@
-from celery import shared_task
+from riderexpert.celery import shared_task
 from datetime import datetime
 from django.conf import settings
 import logging

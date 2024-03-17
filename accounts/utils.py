@@ -1,4 +1,4 @@
-from celery import shared_task
+from riderexpert.celery import shared_task
 from django.utils import timezone
 from django.core.mail import send_mail
 from smtplib import SMTPException
