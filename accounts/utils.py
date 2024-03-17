@@ -1,3 +1,4 @@
+from celery import shared_task
 from django.utils import timezone
 from django.core.mail import send_mail
 from smtplib import SMTPException
@@ -124,7 +125,9 @@ def generate_otp(length=6):
     return otp_value
 
 
-def send_verification_email(user, purpose):
+
+@shared_task
+def send_verification_email(user, purpose=None):
     otp_code = generate_otp()
     current_site = "myAuth.com"
 
@@ -138,6 +141,12 @@ def send_verification_email(user, purpose):
         email_body = "Hi {} you requested a password reset on {} \nplease reset your password with the one-time code {}".format(
             user.first_name, current_site, otp_code
         )
+    else:
+        subject = "One time passcode for Email verification"
+        email_body = "Hi {} you requested to resend the verification email on {} \nplease verify your email with the one time code {}".format(
+            user.first_name, current_site, otp_code
+        )
+
     email = user.email
     from_email = settings.DEFAULT_FROM_EMAIL
 
@@ -154,7 +163,6 @@ def send_verification_email(user, purpose):
         created_at=time_now,
         otp_expiration_time=time_now + timezone.timedelta(minutes=30),
     )
-
 
 def str_to_bool(s):
     return s.lower() in ["true", "1", "yes", "on"]

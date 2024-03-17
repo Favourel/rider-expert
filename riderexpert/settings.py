@@ -38,8 +38,7 @@ SECRET_KEY = "django-insecure-q--wp)4sq%ly16dr1&0(+71jihbdwxsg#%o7qk7o67(qru1-+&
 DEBUG = True
 
 ALLOWED_HOSTS = ["*"]
-CSRF_TRUSTED_ORIGINS = ['https://*.ngrok.io']
-
+CSRF_TRUSTED_ORIGINS = ["https://*.ngrok.io"]
 
 # Application definition
 
@@ -142,6 +141,9 @@ EMAIL_HOST_PASSWORD = "8fcd935d4f88a6"
 EMAIL_PORT = "2525"
 DEFAULT_FROM_EMAIL = "info@emjay.dev"
 EMAIL_USE_TLS = True
+
+# Celery Config
+CELERY_BROKER_URL = "redis://redis:6379/0"
 
 
 # Authentication settings

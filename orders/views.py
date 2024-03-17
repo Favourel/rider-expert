@@ -162,7 +162,7 @@ class GetAvailableRidersView(APIView):
                 riders, self.SEARCH_RADIUS_KM
             )
             if not location_within_radius:
-                supabase.send_customer_notification(
+                supabase.send_customer_notification.delay(
                     customer=customer.user.email, message="No rider around you"
                 )
             else:
@@ -174,7 +174,7 @@ class GetAvailableRidersView(APIView):
                     map_clients_manager.switch_client()
                     results = self.get_matrix_results(origin, location_within_radius)
 
-            supabase.send_riders_notification(
+            supabase.send_riders_notification.delay(
                 results,
                 price=price_offer,
                 request_coordinates={"long": origin_long, "lat": origin_lat},
@@ -255,7 +255,7 @@ class AcceptOrDeclineOrderView(APIView):
                 "order_completed": rider.completed_orders,
                 "price": price if price else cost_of_ride,
             }
-            supabase.send_customer_notification(
+            supabase.send_customer_notification.delay(
                 customer=order.customer.user.email,
                 message="Notifying riders close to you",
                 rider_info=rider_info,
@@ -369,7 +369,7 @@ class AssignOrderToRiderView(APIView):
             rider_message = (
                 f"Order Accepted: Order is {distance} km and {duration} away"
             )
-            supabase.send_riders_notification(
+            supabase.send_riders_notification.delay(
                 result, message=rider_message, order_info=response_data
             )
 

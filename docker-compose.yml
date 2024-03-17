@@ -12,6 +12,7 @@ services:
       - "8000:8000"
     depends_on:
       - db
+      - redis
     environment:
       - DEBUG=1
       - DJANGO_DB_HOST=db
@@ -29,6 +30,18 @@ services:
       - POSTGRES_DB=riderexpert
       - POSTGRES_USER=riderexpert
       - POSTGRES_PASSWORD=testdatabase
+
+  redis:
+    image: redis:latest
+
+  celery:
+    build: .
+    command: celery -A riderexpert worker --loglevel=info
+    volumes:
+      - "./:/app"
+    depends_on:
+      - web
+      - redis
 
 volumes:
   postgres_data:
