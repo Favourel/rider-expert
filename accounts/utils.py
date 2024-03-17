@@ -101,10 +101,26 @@ def retry(ExceptionToCheck=Exception, tries=3, delay=1, backoff=2, logger=None):
     return deco_retry
 
 
-def generate_otp():
+def generate_otp(length=6):
+    """
+    Generate a time-based OTP with the specified length.
+
+    Args:
+        length (int): The length of the OTP code (default is 6).
+
+    Returns:
+        str: The generated OTP code.
+    """
+    if length not in [4, 6]:
+        raise ValueError("OTP length must be either 4 or 6")
+
     # Generate a time-based OTP using PyOTP
     totp = pyotp.TOTP(pyotp.random_base32())
     otp_value = totp.now()
+
+    # Trim the OTP value to the specified length
+    otp_value = otp_value[:length]
+
     return otp_value
 
 
