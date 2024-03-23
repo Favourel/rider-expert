@@ -20,6 +20,8 @@ services:
       - DJANGO_DB_NAME=riderexpert
       - DJANGO_DB_USER=riderexpert
       - DJANGO_DB_PASSWORD=testdatabase
+    args:
+        DOCKER_BUILDKIT: 1
 
   db:
     image: postgres:latest
