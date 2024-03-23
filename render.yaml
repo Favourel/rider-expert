@@ -3,7 +3,6 @@ databases:
     plan: free
     databaseName: riderexpert
     user: riderexpert
-    password: lfw1cKUMlie1stkhQ1Ylv5wmNKtwDASx
 
 services:
   - type: web
