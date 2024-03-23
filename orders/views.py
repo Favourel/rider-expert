@@ -1,3 +1,4 @@
+import decimal
 from django.utils import timezone
 from decimal import Decimal
 from accounts.models import Rider
@@ -90,41 +91,31 @@ class GetAvailableRidersView(APIView):
     permission_classes = [IsAuthenticated]
     SEARCH_RADIUS_KM = 5
 
-    def validate_parameters(
-        self, origin_lat, origin_long, item_weight, is_fragile, price_offer, order_id
-    ):
+    def validate_parameters(self, price_offer):
         """Validate input parameters."""
         try:
-            origin_lat = float(origin_lat)
-            origin_long = float(origin_long)
-            item_weight = float(item_weight)
             price_offer = float(price_offer)
-            is_fragile = str_to_bool(is_fragile)
-            order_id = int(order_id)
         except ValueError as e:
             logger.error(e)
             return False, f"Invalid or missing parameters, {e}"
 
-        if not all(
-            isinstance(param, (float, int))
-            for param in [origin_lat, origin_long, item_weight, price_offer, order_id]
-        ) or not isinstance(is_fragile, bool):
+        if not all(isinstance(param, (float, int)) for param in [price_offer]):
             return False, "Invalid or missing parameters"
         return True, ""
 
     def get(self, request, *args, **kwargs):
-        origin_long = float(request.GET.get("origin_long"))
-        origin_lat = float(request.GET.get("origin_lat"))
-        item_weight = request.GET.get("item_weight")
-        is_fragile = request.GET.get("is_fragile")
         price_offer = request.GET.get("price")
         order_id = request.GET.get("order_id")
+        print({order_id, price_offer})
+        order = get_object_or_404(Order, id=int(order_id))
+        item_weight = order.weight
+        origin_lat = order.pickup_lat
+        origin_long = order.pickup_long
+        is_fragile = order.fragile
 
         customer = request.user.customer
 
-        is_valid, validation_message = self.validate_parameters(
-            origin_lat, origin_long, item_weight, is_fragile, price_offer, order_id
-        )
+        is_valid, validation_message = self.validate_parameters(price_offer)
         if not is_valid:
             return Response(
                 {"status": "error", "message": validation_message}, status=400
@@ -144,6 +135,7 @@ class GetAvailableRidersView(APIView):
 
         # Create a dictionary to map rider emails to rider objects
         rider_email_to_rider = {rider.user.email: rider for rider in rider_queryset}
+        print(rider_email_to_rider, riders_location_data)
 
         # Iterate through riders_location_data and filter the Rider objects
         riders = []
@@ -248,6 +240,7 @@ class AcceptOrDeclineOrderView(APIView):
 
             rider_info = {
                 "rider_name": rider.user.get_full_name,
+                "rider_email": rider.user.email,
                 "vehicle_number": rider.vehicle_registration_number,
                 "rating": rider.ratings if rider.ratings is not None else 0,
                 "distance": distance,
@@ -309,7 +302,9 @@ class AssignOrderToRiderView(APIView):
         price = request.data.get("price")
         wallet = request.user.wallet
 
-        if wallet.balance < price:
+        print(order_id, price, rider_email)
+
+        if wallet.balance < decimal.Decimal(price):
             return Response(
                 {"error": "Insufficient balance"},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -369,17 +364,14 @@ class AssignOrderToRiderView(APIView):
             rider_message = (
                 f"Order Accepted: Order is {distance} km and {duration} away"
             )
-            supabase.send_riders_notification.delay(
-                result, message=rider_message, order_info=response_data
-            )
 
             # Generate order_completion code
             code = generate_otp(length=4)
 
             # Update the order price and save the order
-            order.price = price
+            order.price = decimal.Decimal(price) * 100
+            wallet.balance -= decimal.Decimal(price) * 100
             order.order_completion_code = code
-            wallet.balance -= price
             wallet.updated_at = timezone.now()
             wallet.save()
             order.save()
@@ -390,6 +382,7 @@ class AssignOrderToRiderView(APIView):
                 amount=price,
                 transaction_status="pending",
                 created_at=timezone.now(),
+                paid_at=timezone.now(),
             )
 
             PendingWalletTransaction.objects.create(
@@ -398,7 +391,22 @@ class AssignOrderToRiderView(APIView):
 
             customer_message = f"Order Assigned successfully: {rider.user.get_full_name} is {distance} km and {duration} away. Order code: {code}"
 
-            return Response({"message": customer_message}, status=status.HTTP_200_OK)
+            supabase.send_riders_notification.delay(
+                result,
+                message=rider_message,
+                order_id=order_id,
+                price=price,
+                order_info=response_data,
+                request_coordinates={
+                    "long": order.pickup_long,
+                    "lat": order.pickup_lat,
+                },
+            )
+            customer_message = f"Order Assigned successfully: {rider.user.get_full_name} is {distance} km and {duration} away"
+            return Response(
+                {"message": customer_message, **response_data, "price": order.price},
+                status=status.HTTP_200_OK,
+            )
         except (Rider.DoesNotExist, Order.DoesNotExist):
             # Handle if rider or order not found
             return Response("Rider or Order not found")
@@ -414,6 +422,7 @@ class UpdateOrderStatusView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
+        print(request.data)
         order_id = request.data.get("order_id")
         order_status = request.data.get("status")
         order_code = request.data.get("order_code")
@@ -450,7 +459,17 @@ class UpdateOrderStatusView(APIView):
         order.status = order_status
         order.save()
 
+        supabase.send_customer_notification(
+            customer=order.customer.user.email,
+            message=f"Status update {order_status}",
+            ride_status=order_status,
+            by_pass_rider_info=True,
+        )
+
         return Response(
-            {"message": f"Order status updated to {order_status}."},
+            {
+                "message": f"Order status updated to {order_status}.",
+                "order_status": order_status,
+            },
             status=status.HTTP_200_OK,
         )

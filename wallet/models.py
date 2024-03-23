@@ -7,8 +7,8 @@ class Wallet(models.Model):
     user = models.OneToOneField(CustomUser, on_delete=models.CASCADE)
     code = models.CharField(max_length=20, unique=True)
     balance = models.DecimalField(default=0, max_digits=12, decimal_places=2)
-    created_at = models.DateTimeField()
-    updated_at = models.DateTimeField()
+    created_at = models.DateTimeField(blank=True, auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
 
 class WalletTransaction(models.Model):

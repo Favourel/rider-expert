@@ -17,12 +17,11 @@ class GetWalletBalanceView(APIView):
         wallet_serializer = WalletSerializer(wallet)
         transactions = WalletTransaction.objects.filter(wallet=wallet)
         transactions_serializer = WalletTransactionSerializer(transactions, many=True)
+        print(transactions_serializer.data)
         return Response(
             {
-                "message": {
-                    "Balance ": wallet_serializer.data,
-                    "Transactions ": transactions_serializer.data,
-                }
+                **wallet_serializer.data,
+                "transactions": transactions_serializer.data,
             },
             status=status.HTTP_200_OK,
         )

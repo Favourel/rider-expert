@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/4.1/ref/settings/
 import os
 from pathlib import Path
 from datetime import timedelta
+import dj_database_url
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -27,7 +28,7 @@ SUPABASE_URL = "https://qxplgfcshxuenfzrfjwi.supabase.co"
 
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF4cGxnZmNzaHh1ZW5menJmandpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDczNzg5NDYsImV4cCI6MjAyMjk1NDk0Nn0.FaC6oKiZ7qVLcOp6c8MLyomNJD4Cfxr22F9I6qVW5f8"
 
-PAYSTACK_SECRET_KEY = "sk_test_f6163c644f9984a4ab9915da56ac148098578689"
+PAYSTACK_SECRET_KEY = "sk_test_b57e5f2e8977cd3fd0a0dd257a73a2e35d361c47"
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.1/howto/deployment/checklist/
 
@@ -93,6 +94,18 @@ WSGI_APPLICATION = "riderexpert.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/4.1/ref/settings/#databases
 
+ENVIRON = os.environ.get("ENVIRON")
+
+if ENVIRON and ENVIRON == "test":
+    # Replace the SQLite DATABASES configuration with PostgreSQL:
+    DATABASES = {
+        "default": dj_database_url.config(  # Replace this value with your local database's connection string.
+            default="postgres://riderexpert:lfw1cKUMlie1stkhQ1Ylv5wmNKtwDASx@dpg-cnvkf6qcn0vc73c8rf20-a/riderexpert",
+            conn_max_age=600,
+        )
+    }
+
+
 DATABASES = {
     "custom": {
         "ENGINE": "django.db.backends.postgresql",
@@ -135,12 +148,13 @@ AUTH_PASSWORD_VALIDATORS = [
 AUTH_USER_MODEL = "accounts.CustomUser"
 
 # Email settings
-EMAIL_HOST = "sandbox.smtp.mailtrap.io"
-EMAIL_HOST_USER = "a1b94a501906b4"
-EMAIL_HOST_PASSWORD = "8fcd935d4f88a6"
-EMAIL_PORT = "2525"
-DEFAULT_FROM_EMAIL = "info@emjay.dev"
-EMAIL_USE_TLS = True
+if DEBUG:
+    EMAIL_HOST = "mailcatcher"
+    EMAIL_HOST_USER = ""
+    EMAIL_HOST_PASSWORD = ""
+    EMAIL_PORT = 1025
+    DEFAULT_FROM_EMAIL = "info@emjay.dev"
+    EMAIL_USE_TLS = False
 
 # Celery Config
 CELERY_BROKER_URL = "redis://redis:6379/0"

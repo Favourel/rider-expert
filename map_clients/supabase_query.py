@@ -1,4 +1,4 @@
-from riderexpert.celery import shared_task
+from celery import shared_task
 from datetime import datetime
 from django.conf import settings
 import logging
@@ -86,13 +86,22 @@ class SupabaseTransactions:
             self.handle_error(e)
 
     @shared_task
-    def send_customer_notification(self, customer, message, rider_info=None):
+    def send_customer_notification(
+        self,
+        customer,
+        message,
+        rider_info=None,
+        ride_status=None,
+        by_pass_rider_info=False,
+    ):
+        rider_data = {"rider_info": rider_info} if not by_pass_rider_info else {}
         try:
             self.supabase.table(self.customers_table).update(
                 {
                     "notification": message,
-                    "rider_info": rider_info,
                     "updated_at": datetime.now().strftime("%m/%d/%Y,%H:%M:%S"),
+                    "ride_status": ride_status,
+                    **rider_data,
                 }
             ).eq("email", customer).execute()
         except Exception as e:

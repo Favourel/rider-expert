@@ -10,6 +10,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from accounts.models import CustomUser
 from wallet.models import WalletTransaction, Wallet
+from rest_framework.views import APIView
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 secret = settings.PAYSTACK_SECRET_KEY
@@ -18,7 +20,9 @@ secret = settings.PAYSTACK_SECRET_KEY
 class PaystackWebhookView(APIView):
     @csrf_exempt
     def post(self, request, *args, **kwargs):
+
         payload = request.body
+        print(payload)
         sig_header = request.headers.get("x-paystack-signature")
         body = None
         event = None
@@ -43,13 +47,18 @@ class PaystackWebhookView(APIView):
             try:
                 with transaction.atomic():
                     user = CustomUser.objects.filter(
-                        email=customer.get("email")
+                        email__iexact=customer.get("email")
                     ).first()
-                    wallet, created = Wallet.objects.get_or_create(
-                        user=user,
-                        code=customer.get("customer_code"),
-                        created_at=data.get("created_at"),
-                    )
+                    try:
+                        wallet = Wallet.objects.get(code=customer.get("customer_code"))
+                    except Wallet.DoesNotExist:
+
+                        wallet = Wallet.objects.create(
+                            user=user,
+                            code=customer.get("customer_code"),
+                            created_at=datetime.now(),
+                            updated_at=data.get("paid_at")
+                        )
                     WalletTransaction.objects.create(
                         wallet=wallet,
                         amount=data.get("amount"),

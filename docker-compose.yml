@@ -20,8 +20,6 @@ services:
       - DJANGO_DB_NAME=riderexpert
       - DJANGO_DB_USER=riderexpert
       - DJANGO_DB_PASSWORD=testdatabase
-    args:
-        DOCKER_BUILDKIT: 1
 
   db:
     image: postgres:latest
@@ -42,8 +40,24 @@ services:
     volumes:
       - "./:/app"
     depends_on:
+      - db
       - web
       - redis
+    environment:
+      - DEBUG=1
+      - DJANGO_DB_HOST=db
+      - DJANGO_DB_PORT=5432
+      - DJANGO_DB_NAME=riderexpert
+      - DJANGO_DB_USER=riderexpert
+      - DJANGO_DB_PASSWORD=testdatabase
+
+
+  mailcatcher:
+    restart: on-failure
+    image: dockage/mailcatcher:0.9.0
+    ports:
+    - "1080:1080"
+    - "1026:1025"
 
 volumes:
   postgres_data:

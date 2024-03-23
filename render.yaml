@@ -1,25 +1,22 @@
+databases:
+  - name: riderexpert
+    plan: free
+    databaseName: riderexpert
+    user: riderexpert
+    password: lfw1cKUMlie1stkhQ1Ylv5wmNKtwDASx
+
 services:
-  - name: web
-    buildCommand: "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
-    env: [
-      "DEBUG=1",
-      "DJANGO_DB_HOST=db",
-      "DJANGO_DB_PORT=5432",
-      "DJANGO_DB_NAME=riderexpert",
-      "DJANGO_DB_USER=riderexpert",
-      "DJANGO_DB_PASSWORD=testdatabase"
-    ]
-    dockerfile: Dockerfile
-    envVars: [
-      {
-        key: DJANGO_SETTINGS_MODULE
-        value: "riderexpert.settings"
-      }
-    ]
-    services:
-      - name: postgres
-        env: [
-          "POSTGRES_DB=riderexpert",
-          "POSTGRES_USER=riderexpert",
-          "POSTGRES_PASSWORD=testdatabase"
-        ]
+  - type: web
+    name: web
+    plan: free
+    buildCommand: "./build.sh"
+    startCommand: "python -m gunicorn riderexpert.asgi:application -k uvicorn.workers.UvicornWorker"
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mysitedb
+          property: connectionString
+      - key: ENVIRON
+        value: test
+      - key: WEB_CONCURRENCY
+        value: 4

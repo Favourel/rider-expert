@@ -1,10 +1,10 @@
-from riderexpert.celery import shared_task
+from celery import shared_task
 from django.utils import timezone
 from django.core.mail import send_mail
 from smtplib import SMTPException
 import pyotp
 from django.conf import settings
-from .models import UserVerification
+from .models import CustomUser, UserVerification
 from math import radians, sin, cos, sqrt, atan2
 import logging
 from functools import wraps
@@ -125,9 +125,10 @@ def generate_otp(length=6):
     return otp_value
 
 
-
 @shared_task
-def send_verification_email(user, purpose=None):
+def send_verification_email(user_id, purpose=None):
+    user = CustomUser.objects.get(id=user_id)
+    print(user)
     otp_code = generate_otp()
     current_site = "myAuth.com"
 
@@ -163,6 +164,7 @@ def send_verification_email(user, purpose=None):
         created_at=time_now,
         otp_expiration_time=time_now + timezone.timedelta(minutes=30),
     )
+
 
 def str_to_bool(s):
     return s.lower() in ["true", "1", "yes", "on"]

@@ -3,7 +3,7 @@ from django.conf import settings
 
 
 class PaystackServices:
-    def __init__(self, email, first_name, last_name, phone_number):
+    def __init__(self, email="", first_name="", last_name="", phone_number=""):
         self.api_key = settings.PAYSTACK_SECRET_KEY
         self.base_url = "https://api.paystack.co/customer"
         self.headers = {
@@ -47,8 +47,8 @@ class PaystackServices:
         return data
 
     def fetch_customer(self, email_or_code):
-        url = f"{self.base_url}/:{email_or_code}"
-        headers = {"Authorization": f"Bearer {self.api}"}
+        url = f"{self.base_url}/{email_or_code}"
+        headers = {"Authorization": f"Bearer {self.api_key}"}
 
         response = requests.get(url, headers=headers)
         response.raise_for_status()

@@ -21,6 +21,17 @@ class BaseRegistrationView(generics.CreateAPIView):
     serializer_class = None
     user_model = None
 
+    def get_rider_data(self, user, request):
+        if not self.user_model == Rider:
+            return {}
+        else:
+            {
+                "min_capacity": request.data["min_capacity"],
+                "max_capacity": request.data["max_capacity"],
+                "fragile_item_allowed": request.data["fragile_item_allowed"],
+                "charge_per_km": request.data["charge_per_km"],
+            }
+
     @transaction.atomic
     def post(self, request, *args, **kwargs):
         # Log the request data
@@ -50,16 +61,8 @@ class BaseRegistrationView(generics.CreateAPIView):
                             user.phone_number,
                         )
                         paystack_user = paystack_api.create_customer()
-                        self.user_model.objects.create(
-                            user=user,
-                            vehicle_registration_number=request.data[
-                                "vehicle_registration_number"
-                            ],
-                            min_capacity=request.data["min_capacity"],
-                            max_capacity=request.data["max_capacity"],
-                            fragile_item_allowed=request.data["fragile_item_allowed"],
-                            charge_per_km=request.data["charge_per_km"],
-                        )
+                        extra_data = self.get_rider_data(user, request)
+                        self.user_model.objects.create(user=user, **extra_data)
 
                         is_created = paystack_user["status"]
                         paystack_user_data = paystack_user["data"]
@@ -85,7 +88,7 @@ class BaseRegistrationView(generics.CreateAPIView):
 
                         if user_obj_serializer:
                             # Send a welcome email or perform any additional actions
-                            send_verification_email.delay(user, "registration")
+                            send_verification_email.delay(user.id, "registration")
 
                             # Return a response with the serialized user object and a success message
                             return Response(
@@ -102,10 +105,8 @@ class BaseRegistrationView(generics.CreateAPIView):
                     # Handle integrity errors
                     logger.error(f"Integrity error: {e}")
                     return Response(
-                        {
-                            "detail": "Integrity error. Please ensure the data is unique."
-                        },
-                        status=status.HTTP_400_BAD_REQUEST,
+                        {"detail": "Error with data provided"},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     )
                 except Exception as e:
                     # Handle unexpected errors
@@ -148,9 +149,7 @@ class VerifyEmailView(APIView):
 
         try:
             # Query the UserVerification model for the given otp_token
-            user_verification = UserVerification.objects.filter(
-                otp__exact=otp_token
-            ).first()
+            user_verification = UserVerification.objects.get(otp__exact=otp_token)
         except UserVerification.DoesNotExist:
             return Response(
                 {"detail": "Invalid OTP token"}, status=status.HTTP_400_BAD_REQUEST
@@ -248,11 +247,8 @@ class LoginView(APIView):
             return self.invalid_credentials_response()
 
         if hasattr(user, "rider_profile"):
-            paystack_user = PaystackServices().fetch_customer(email)
+            paystack_user = PaystackServices().fetch_customer(user.wallet.code)
             is_identified = paystack_user["identified"]
-            RiderVerification.objects.get_or_create(
-                rider=user.rider_profile, paystack_account_verification=is_identified
-            )
             if not is_identified:
                 return self.unverified_response("Identity not verified.")
 
@@ -277,7 +273,13 @@ class LoginView(APIView):
 
         # Return the tokens with a 200 OK status code
         return Response(
-            {**tokens, "user_type": user_type, "email": user.email},
+            {
+                **tokens,
+                "user_type": user_type,
+                "email": user.email,
+                "name": user.get_full_name,
+                "balance": user.wallet.balance,
+            },
             status=status.HTTP_200_OK,
         )
 
