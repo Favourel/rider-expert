@@ -105,25 +105,25 @@ if ENVIRON and ENVIRON == "test":
         )
     }
 
-
-DATABASES = {
-    "custom": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": "riderexpert",
-        "USER": "riderexpert",
-        "PASSWORD": "testdatabase",
-        "HOST": "db",
-        "PORT": os.environ.get("DJANGO_DB_PORT", "5432"),
-    },
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get("DJANGO_DB_NAME", "default_db_name"),
-        "USER": os.environ.get("DJANGO_DB_USER", "default_db_user"),
-        "PASSWORD": os.environ.get("DJANGO_DB_PASSWORD", "default_db_password"),
-        "HOST": os.environ.get("DJANGO_DB_HOST", "localhost"),
-        "PORT": os.environ.get("DJANGO_DB_PORT", "5432"),
-    },
-}
+else:
+    DATABASES = {
+        "custom": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": "riderexpert",
+            "USER": "riderexpert",
+            "PASSWORD": "testdatabase",
+            "HOST": "db",
+            "PORT": os.environ.get("DJANGO_DB_PORT", "5432"),
+        },
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.environ.get("DJANGO_DB_NAME", "default_db_name"),
+            "USER": os.environ.get("DJANGO_DB_USER", "default_db_user"),
+            "PASSWORD": os.environ.get("DJANGO_DB_PASSWORD", "default_db_password"),
+            "HOST": os.environ.get("DJANGO_DB_HOST", "localhost"),
+            "PORT": os.environ.get("DJANGO_DB_PORT", "5432"),
+        },
+    }
 
 
 # Password validation
