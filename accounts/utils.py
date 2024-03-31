@@ -2,6 +2,7 @@ from celery import shared_task
 from django.utils import timezone
 from django.core.mail import send_mail
 from smtplib import SMTPException
+from map_clients.supabase_query import SupabaseTransactions
 import pyotp
 from django.conf import settings
 from .models import CustomUser, UserVerification
@@ -125,6 +126,45 @@ def generate_otp(length=6):
     return otp_value
 
 
+supabase = SupabaseTransactions()
+
+
+@shared_task
+def send_customer_notification(
+    customer,
+    message,
+    rider_info=None,
+    ride_status=None,
+    by_pass_rider_info=False,
+):
+    supabase.send_customer_notification(
+        customer,
+        message,
+        rider_info,
+        ride_status,
+        by_pass_rider_info,
+    )
+
+
+@shared_task
+def send_riders_notification(
+    riders,
+    price=None,
+    message=None,
+    request_coordinates=None,
+    order_id=None,
+    order_info=None,
+):
+    supabase.send_riders_notification(
+        riders,
+        price,
+        message,
+        request_coordinates,
+        order_id,
+        order_info,
+    )
+
+
 @shared_task
 def send_verification_email(user_id, purpose=None):
     user = CustomUser.objects.get(id=user_id)
@@ -162,7 +202,7 @@ def send_verification_email(user_id, purpose=None):
         user=user,
         otp=otp_code,
         created_at=time_now,
-        otp_expiration_time=time_now + timezone.timedelta(minutes=30),
+        otp_expiration_time=time_now + timezone.timedelta(hours=24),
     )
 
 

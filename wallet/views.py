@@ -17,7 +17,6 @@ class GetWalletBalanceView(APIView):
         wallet_serializer = WalletSerializer(wallet)
         transactions = WalletTransaction.objects.filter(wallet=wallet)
         transactions_serializer = WalletTransactionSerializer(transactions, many=True)
-        print(transactions_serializer.data)
         return Response(
             {
                 **wallet_serializer.data,

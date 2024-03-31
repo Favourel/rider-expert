@@ -47,7 +47,6 @@ class SupabaseTransactions:
         except Exception as e:
             self.handle_error(e)
 
-    @shared_task
     def send_riders_notification(
         self,
         riders,
@@ -85,7 +84,6 @@ class SupabaseTransactions:
         except Exception as e:
             self.handle_error(e)
 
-    @shared_task
     def send_customer_notification(
         self,
         customer,

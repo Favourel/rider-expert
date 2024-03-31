@@ -25,11 +25,14 @@ class BaseRegistrationView(generics.CreateAPIView):
         if not self.user_model == Rider:
             return {}
         else:
-            {
+            return {
                 "min_capacity": request.data["min_capacity"],
                 "max_capacity": request.data["max_capacity"],
                 "fragile_item_allowed": request.data["fragile_item_allowed"],
                 "charge_per_km": request.data["charge_per_km"],
+                "vehicle_registration_number": request.data[
+                    "vehicle_registration_number"
+                ],
             }
 
     @transaction.atomic
@@ -61,8 +64,8 @@ class BaseRegistrationView(generics.CreateAPIView):
                             user.phone_number,
                         )
                         paystack_user = paystack_api.create_customer()
-                        extra_data = self.get_rider_data(user, request)
-                        self.user_model.objects.create(user=user, **extra_data)
+                        user_data = {**self.get_rider_data(user, request), "user": user}
+                        self.user_model.objects.create(**user_data)
 
                         is_created = paystack_user["status"]
                         paystack_user_data = paystack_user["data"]
@@ -232,7 +235,7 @@ class LoginView(APIView):
             A response object with the appropriate tokens and status code.
         """
         # Get the email and password from the request data
-        email = request.data.get("email")
+        email = request.data.get("email").lower()
         password = request.data.get("password")
 
         # Check if email or password is missing
