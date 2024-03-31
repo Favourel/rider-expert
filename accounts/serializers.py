@@ -53,7 +53,7 @@ class UserSerializer(serializers.ModelSerializer):
         return value
 
     def validate_email(self, value):
-        if CustomUser.objects.filter(email=value).exists():
+        if CustomUser.objects.filter(email__iexact=value).exists():
             raise serializers.ValidationError("This email is already in use.")
         return value
 
@@ -76,6 +76,9 @@ class UserSerializer(serializers.ModelSerializer):
         # Ensure that password is not None before validating its length
         if password is None:
             raise serializers.ValidationError("Password cannot be empty.")
+
+        email = validated_data.pop("email").lower()
+        validated_data["email"] = email
 
         self.validate_password(password)
 
@@ -116,5 +119,5 @@ class RiderSerializer(serializers.ModelSerializer):
             "ratings",
             "account_number",
             "bank_code",
-            "bvn"
+            "bvn",
         )

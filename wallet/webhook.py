@@ -22,7 +22,6 @@ class PaystackWebhookView(APIView):
     def post(self, request, *args, **kwargs):
 
         payload = request.body
-        print(payload)
         sig_header = request.headers.get("x-paystack-signature")
         body = None
         event = None
@@ -57,7 +56,7 @@ class PaystackWebhookView(APIView):
                             user=user,
                             code=customer.get("customer_code"),
                             created_at=datetime.now(),
-                            updated_at=data.get("paid_at")
+                            updated_at=data.get("paid_at"),
                         )
                     WalletTransaction.objects.create(
                         wallet=wallet,

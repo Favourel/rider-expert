@@ -13,6 +13,8 @@ class Order(models.Model):
         ("Arrived", _("Arrived")),
         ("Delivered", _("Delivered")),
         ("Failed", _("Failed")),
+        ("Created", _("Created")),
+        ("RiderSearch", _("RiderSearch")),
     ]
 
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE)
@@ -22,7 +24,7 @@ class Order(models.Model):
     pickup_lat = models.FloatField(blank=True, null=True)
     pickup_long = models.FloatField(blank=True, null=True)
     status = models.CharField(
-        max_length=20, choices=STATUS_CHOICES, default="PendingPickup"
+        max_length=20, choices=STATUS_CHOICES, default="Created"
     )
     recipient_name = models.CharField(max_length=100)
     recipient_address = models.TextField()

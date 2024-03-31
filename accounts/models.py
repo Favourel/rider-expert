@@ -44,7 +44,7 @@ class UserVerification(models.Model):
 
     @property
     def has_expired(self):
-        return self.otp_expiration_time > timezone.now()
+        return self.otp_expiration_time < timezone.now()
 
 
 class Customer(models.Model):
@@ -78,4 +78,3 @@ class Rider(models.Model):
 class RiderVerification(models.Model):
     rider = models.OneToOneField(Rider, on_delete=models.CASCADE)
     paystack_account_verification = models.BooleanField(default=False)
-    

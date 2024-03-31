@@ -5,7 +5,13 @@ from accounts.models import Rider
 from django.db import transaction
 from django.db.models import Avg
 from django.shortcuts import get_object_or_404
-from accounts.utils import DistanceCalculator, generate_otp, str_to_bool
+from accounts.utils import (
+    DistanceCalculator,
+    generate_otp,
+    send_customer_notification,
+    send_riders_notification,
+    str_to_bool,
+)
 from map_clients.map_clients import MapClientsManager, get_distance
 from map_clients.supabase_query import SupabaseTransactions
 from rest_framework import status
@@ -106,7 +112,6 @@ class GetAvailableRidersView(APIView):
     def get(self, request, *args, **kwargs):
         price_offer = request.GET.get("price")
         order_id = request.GET.get("order_id")
-        print({order_id, price_offer})
         order = get_object_or_404(Order, id=int(order_id))
         item_weight = order.weight
         origin_lat = order.pickup_lat
@@ -135,7 +140,6 @@ class GetAvailableRidersView(APIView):
 
         # Create a dictionary to map rider emails to rider objects
         rider_email_to_rider = {rider.user.email: rider for rider in rider_queryset}
-        print(rider_email_to_rider, riders_location_data)
 
         # Iterate through riders_location_data and filter the Rider objects
         riders = []
@@ -154,7 +158,7 @@ class GetAvailableRidersView(APIView):
                 riders, self.SEARCH_RADIUS_KM
             )
             if not location_within_radius:
-                supabase.send_customer_notification.delay(
+                send_customer_notification.delay(
                     customer=customer.user.email, message="No rider around you"
                 )
             else:
@@ -165,8 +169,7 @@ class GetAvailableRidersView(APIView):
                     logger.error(f"Error processing API request: {str(e)}")
                     map_clients_manager.switch_client()
                     results = self.get_matrix_results(origin, location_within_radius)
-
-            supabase.send_riders_notification.delay(
+            send_riders_notification.delay(
                 results,
                 price=price_offer,
                 request_coordinates={"long": origin_long, "lat": origin_lat},
@@ -248,7 +251,7 @@ class AcceptOrDeclineOrderView(APIView):
                 "order_completed": rider.completed_orders,
                 "price": price if price else cost_of_ride,
             }
-            supabase.send_customer_notification.delay(
+            send_customer_notification.delay(
                 customer=order.customer.user.email,
                 message="Notifying riders close to you",
                 rider_info=rider_info,
@@ -301,8 +304,6 @@ class AssignOrderToRiderView(APIView):
         order_id = request.data.get("order_id")
         price = request.data.get("price")
         wallet = request.user.wallet
-
-        print(order_id, price, rider_email)
 
         if wallet.balance < decimal.Decimal(price):
             return Response(
@@ -391,7 +392,7 @@ class AssignOrderToRiderView(APIView):
 
             customer_message = f"Order Assigned successfully: {rider.user.get_full_name} is {distance} km and {duration} away. Order code: {code}"
 
-            supabase.send_riders_notification.delay(
+            send_riders_notification.delay(
                 result,
                 message=rider_message,
                 order_id=order_id,
@@ -404,7 +405,12 @@ class AssignOrderToRiderView(APIView):
             )
             customer_message = f"Order Assigned successfully: {rider.user.get_full_name} is {distance} km and {duration} away"
             return Response(
-                {"message": customer_message, **response_data, "price": order.price},
+                {
+                    "message": customer_message,
+                    **response_data,
+                    "price": order.price,
+                    "code": code,
+                },
                 status=status.HTTP_200_OK,
             )
         except (Rider.DoesNotExist, Order.DoesNotExist):
@@ -422,7 +428,6 @@ class UpdateOrderStatusView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
-        print(request.data)
         order_id = request.data.get("order_id")
         order_status = request.data.get("status")
         order_code = request.data.get("order_code")
@@ -440,26 +445,26 @@ class UpdateOrderStatusView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if order_status == "Delivered" and not order_code:
-            return Response(
-                {"error": "order_code is required for Delivered status."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        # if order_status == "Delivered" and not order_code:
+        #     return Response(
+        #         {"error": "order_code is required for Delivered status."},
+        #         status=status.HTTP_400_BAD_REQUEST,
+        #     )
 
         # Check if the order exists
         order = get_object_or_404(Order, id=order_id)
 
         # Verify order code if required
-        if order_status == "Delivered" and order.order_completion_code != order_code:
-            return Response(
-                {"error": "Invalid order code."}, status=status.HTTP_400_BAD_REQUEST
-            )
+        # if order_status == "Delivered" and order.order_completion_code != order_code:
+        #     return Response(
+        #         {"error": "Invalid order code."}, status=status.HTTP_400_BAD_REQUEST
+        #     )
 
         # Update order status
         order.status = order_status
         order.save()
 
-        supabase.send_customer_notification(
+        send_customer_notification(
             customer=order.customer.user.email,
             message=f"Status update {order_status}",
             ride_status=order_status,
