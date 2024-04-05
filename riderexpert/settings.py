@@ -100,7 +100,7 @@ if ENVIRON and ENVIRON == "test":
     # Replace the SQLite DATABASES configuration with PostgreSQL:
     DATABASES = {
         "default": dj_database_url.config(  # Replace this value with your local database's connection string.
-            default="postgres://riderexpert:lfw1cKUMlie1stkhQ1Ylv5wmNKtwDASx@dpg-cnvkf6qcn0vc73c8rf20-a/riderexpert",
+            default=os.environ.get("DATABASE_URL"),
             conn_max_age=600,
         )
     }
