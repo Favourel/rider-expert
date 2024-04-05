@@ -6,18 +6,18 @@ databases:
 
 services:
   - type: worker
-  name: celery-worker
-  region: ohio
-  runtime: python
-  buildCommand: "pip install -r requirements.txt"
-  startCommand: "celery --app tasks worker --loglevel info --concurrency 4"
-  autoDeploy: false
-  envVars:
-    - key: CELERY_BROKER_URL
-      fromService:
-        name: celery-redis
-        type: redis
-        property: connectionString
+    name: celery-worker
+    region: ohio
+    runtime: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "celery -A riderexpert worker --loglevel=info --concurrency 4"
+    autoDeploy: false
+    envVars:
+      - key: CELERY_BROKER_URL
+        fromService:
+          name: celery-redis
+          type: redis
+          property: connectionString
   - type: web
     name: web
     plan: free

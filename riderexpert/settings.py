@@ -155,6 +155,13 @@ if DEBUG:
     EMAIL_PORT = 1025
     DEFAULT_FROM_EMAIL = "info@emjay.dev"
     EMAIL_USE_TLS = False
+else:
+    EMAIL_HOST = "mail.riderexpert.com.ng"
+    EMAIL_HOST_USER = "support@riderexpert.com.ng"
+    EMAIL_HOST_PASSWORD = "lhrT;xmpQiLS"
+    EMAIL_PORT = 465
+    DEFAULT_FROM_EMAIL = "support@riderexpert.com.ng"
+    EMAIL_USE_TLS = True
 
 # Celery Config
 CELERY_BROKER_URL = "redis://redis:6379/0"
