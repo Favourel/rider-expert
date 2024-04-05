@@ -164,8 +164,10 @@ else:
     EMAIL_USE_TLS = True
 
 # Celery Config
-CELERY_BROKER_URL = "redis://redis:6379/0"
-
+if DEBUG:
+    CELERY_BROKER_URL = "redis://redis:6379/0"
+else:
+    CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL")
 
 # Authentication settings
 REST_FRAMEWORK = {
