@@ -3,7 +3,8 @@ from django.utils import timezone
 from decimal import Decimal
 from accounts.models import Rider
 from django.db import transaction
-from django.db.models import Avg
+from django.db.models import Avg, Q
+
 from django.shortcuts import get_object_or_404
 from accounts.utils import (
     DistanceCalculator,
@@ -31,6 +32,37 @@ supabase = SupabaseTransactions()
 logger = logging.getLogger(__name__)
 
 
+def get_rider_available(SEARCH_RADIUS_KM, order_location):
+    fields = ["rider_email", "current_lat", "current_long"]
+    riders_location_data = supabase.get_supabase_riders(fields=fields)
+
+    distance_calc = DistanceCalculator(order_location)
+    riders_within_radius = distance_calc.destinations_within_radius(
+        riders_location_data, SEARCH_RADIUS_KM
+    )
+    return riders_within_radius
+
+
+def get_ride_average_cost(riders_within_radius, order_location, recipient_location):
+    rider_emails = [rider["email"] for rider in riders_within_radius]
+
+    # Query Rider model to get charge_per_km for riders within radius
+    riders_within_radius_queryset = Rider.objects.filter(user__email__in=rider_emails)
+    average_charge_per_km = riders_within_radius_queryset.aggregate(
+        avg_charge=Avg("charge_per_km")
+    )["avg_charge"]
+
+    trip_distance = get_distance(order_location, recipient_location)
+
+    # Convert trip_distance to Decimal
+    trip_distance_decimal = Decimal(str(trip_distance))
+
+    # Calculate the cost based on the average charge_per_km and trip_distance
+    cost = round((average_charge_per_km * trip_distance_decimal), 2)
+
+    return cost
+
+
 class CreateOrderView(APIView):
     permission_classes = [IsAuthenticated]
     SEARCH_RADIUS_KM = 5
@@ -51,35 +83,15 @@ class CreateOrderView(APIView):
         if serializer.is_valid():
             serializer.validated_data["customer"] = request.user.customer
 
-            fields = ["rider_email", "current_lat", "current_long"]
-            riders_location_data = supabase.get_supabase_riders(fields=fields)
-
-            distance_calc = DistanceCalculator(order_location)
-            riders_within_radius = distance_calc.destinations_within_radius(
-                riders_location_data, self.SEARCH_RADIUS_KM
+            riders_within_radius = get_rider_available(
+                self.SEARCH_RADIUS_KM, order_location
             )
 
             if riders_within_radius:
-                rider_emails = [rider["email"] for rider in riders_within_radius]
-
-                # Query Rider model to get charge_per_km for riders within radius
-                riders_within_radius_queryset = Rider.objects.filter(
-                    user__email__in=rider_emails
+                cost = get_ride_average_cost(
+                    riders_within_radius, order_location, recipient_location
                 )
-                average_charge_per_km = riders_within_radius_queryset.aggregate(
-                    avg_charge=Avg("charge_per_km")
-                )["avg_charge"]
-
-                trip_distance = get_distance(order_location, recipient_location)
-
-                # Convert trip_distance to Decimal
-                trip_distance_decimal = Decimal(str(trip_distance))
-
-                # Calculate the cost based on the average charge_per_km and trip_distance
-                cost = round((average_charge_per_km * trip_distance_decimal), 2)
-
                 serializer.save()
-
                 # Include cost in serializer data
                 response_data = serializer.data
                 response_data["cost"] = cost
@@ -175,9 +187,14 @@ class GetAvailableRidersView(APIView):
                 request_coordinates={"long": origin_long, "lat": origin_lat},
                 order_id=order_id,
             )
-
+        order.status = "RiderSearch"
+        order.save()
         return Response(
-            {"status": "success", "message": "Notification sent successfully"}
+            {
+                "status": "success",
+                "order_status": order.status,
+                "message": "Notification sent successfully",
+            }
         )
 
     def get_matrix_results(self, origin, destinations):
@@ -194,6 +211,38 @@ class OrderDetailView(APIView):
         order = get_object_or_404(Order, id=order_id)
         serializer = OrderDetailSerializer(order)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class GetOrderDetailByUser(APIView):
+    SEARCH_RADIUS_KM = 5
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, email, *args, **kwargs):
+        print(email)
+        user_type = request.GET.get("user_type")
+        order = Order.objects.filter(
+            Q(customer__user__email=email) | Q(rider__user__email=email)
+        )
+        if order:
+            order = order.latest("created_at")
+            extra_data = {}
+            if user_type == "customer":
+                order_location = f"{order.pickup_long},{order.pickup_lat}"
+                recipient_location = f"{order.recipient_long},{order.recipient_lat}"
+                available_riders = get_rider_available(
+                    self.SEARCH_RADIUS_KM, order_location
+                )
+                cost = get_ride_average_cost(
+                    available_riders, order_location, recipient_location
+                )
+                extra_data["cost"] = cost
+
+            serializer = OrderDetailSerializer(order)
+            return Response(
+                {**serializer.data, **extra_data}, status=status.HTTP_200_OK
+            )
+        else:
+            return Response({"message": "Order not found"}, status=status.HTTP_200_OK)
 
 
 class AcceptOrDeclineOrderView(APIView):
@@ -344,12 +393,6 @@ class AssignOrderToRiderView(APIView):
             distance = result[0]["distance"]
             duration = result[0]["duration"]
 
-            # Serialize the updated order and attach distance and duration
-            serializer = OrderSerializer(order)
-            response_data = serializer.data
-            response_data["distance"] = distance
-            response_data["duration"] = duration
-
             order_info = {
                 "id": order.id,
                 "name": order.name,
@@ -391,6 +434,12 @@ class AssignOrderToRiderView(APIView):
             )
 
             customer_message = f"Order Assigned successfully: {rider.user.get_full_name} is {distance} km and {duration} away. Order code: {code}"
+
+            # Serialize the updated order and attach distance and duration
+            serializer = OrderSerializer(order)
+            response_data = serializer.data
+            response_data["distance"] = distance
+            response_data["duration"] = duration
 
             send_riders_notification.delay(
                 result,
@@ -445,20 +494,20 @@ class UpdateOrderStatusView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # if order_status == "Delivered" and not order_code:
-        #     return Response(
-        #         {"error": "order_code is required for Delivered status."},
-        #         status=status.HTTP_400_BAD_REQUEST,
-        #     )
+        if order_status == "Delivered" and not order_code:
+            return Response(
+                {"error": "order_code is required for Delivered status."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         # Check if the order exists
         order = get_object_or_404(Order, id=order_id)
 
         # Verify order code if required
-        # if order_status == "Delivered" and order.order_completion_code != order_code:
-        #     return Response(
-        #         {"error": "Invalid order code."}, status=status.HTTP_400_BAD_REQUEST
-        #     )
+        if order_status == "Delivered" and order.order_completion_code != order_code:
+            return Response(
+                {"error": "Invalid order code."}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         # Update order status
         order.status = order_status
