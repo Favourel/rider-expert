@@ -158,10 +158,11 @@ if DEBUG:
 else:
     EMAIL_HOST = "mail.riderexpert.com.ng"
     EMAIL_HOST_USER = "support@riderexpert.com.ng"
-    EMAIL_HOST_PASSWORD = "lhrT;xmpQiLS"
+    EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD")
     EMAIL_PORT = 465
     DEFAULT_FROM_EMAIL = "support@riderexpert.com.ng"
-    EMAIL_USE_TLS = True
+    EMAIL_USE_TLS = False
+    EMAIL_USE_SSL = True
 
 # Celery Config
 if DEBUG:
