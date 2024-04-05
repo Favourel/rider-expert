@@ -36,7 +36,7 @@ PAYSTACK_SECRET_KEY = "sk_test_b57e5f2e8977cd3fd0a0dd257a73a2e35d361c47"
 SECRET_KEY = "django-insecure-q--wp)4sq%ly16dr1&0(+71jihbdwxsg#%o7qk7o67(qru1-+&"
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get("DEBUG", "False") == "True"
 
 ALLOWED_HOSTS = ["*"]
 CSRF_TRUSTED_ORIGINS = ["https://*.ngrok.io"]
