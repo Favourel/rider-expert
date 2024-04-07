@@ -14,7 +14,7 @@ services:
       - db
       - redis
     environment:
-      - DEBUG=1
+      - DEBUG=True
       - DJANGO_DB_HOST=db
       - DJANGO_DB_PORT=5432
       - DJANGO_DB_NAME=riderexpert
@@ -44,7 +44,7 @@ services:
       - web
       - redis
     environment:
-      - DEBUG=1
+      - DEBUG=True
       - DJANGO_DB_HOST=db
       - DJANGO_DB_PORT=5432
       - DJANGO_DB_NAME=riderexpert
