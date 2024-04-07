@@ -111,7 +111,7 @@ class TomTomDistanceMatrix:
                     f"Failed to get async response. Status code: {response.status_code}"
                 )
                 raise Exception(
-                    f"Failed to get async response. Status code: {response.status_code}. Error: {e}"
+                    f"Failed to get async response. Status code: {response.status_code}"
                 )
 
         except Exception as e:
