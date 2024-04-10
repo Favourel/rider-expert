@@ -193,8 +193,10 @@ class GetAvailableRidersView(APIView):
             )
         order.status = "RiderSearch"
         order.save()
+        order_data = OrderDetailUserSerializer(order).data
         return Response(
             {
+                **order_data,
                 "status": "success",
                 "order_status": order.status,
                 "message": "Notification sent successfully",
