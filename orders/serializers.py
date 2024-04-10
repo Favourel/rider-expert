@@ -46,4 +46,26 @@ class OrderDetailSerializer(serializers.ModelSerializer):
 class OrderDetailUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = Order
-        fields = ["__all__"]
+        fields = [
+            "id",
+            "name",
+            "pickup_lat",
+            "pickup_long",
+            "pickup_address",
+            "recipient_name",
+            "recipient_lat",
+            "recipient_long",
+            "recipient_address",
+            "recipient_phone_number",
+            "weight",
+            "value",
+            "fragile",
+            "price",
+            "cost",
+            "distance",
+            "duration",
+            "status",
+            "customer",
+            "rider",
+            "order_completion_code",
+        ]
