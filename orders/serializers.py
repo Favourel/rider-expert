@@ -44,6 +44,8 @@ class OrderDetailSerializer(serializers.ModelSerializer):
 
 
 class OrderDetailUserSerializer(serializers.ModelSerializer):
+    cost = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+
     class Meta:
         model = Order
         fields = [
