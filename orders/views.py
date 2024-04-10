@@ -22,7 +22,11 @@ from rest_framework.views import APIView
 from wallet.models import PendingWalletTransaction, WalletTransaction
 from .models import DeclinedOrder, Order
 from accounts.models import Rider
-from .serializers import OrderSerializer, OrderDetailSerializer
+from .serializers import (
+    OrderDetailUserSerializer,
+    OrderSerializer,
+    OrderDetailSerializer,
+)
 import logging
 
 
@@ -237,7 +241,7 @@ class GetOrderDetailByUser(APIView):
                 )
                 extra_data["cost"] = cost
 
-            serializer = OrderDetailSerializer(order)
+            serializer = OrderDetailUserSerializer(order)
             return Response(
                 {**serializer.data, **extra_data}, status=status.HTTP_200_OK
             )

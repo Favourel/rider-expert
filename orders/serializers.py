@@ -41,3 +41,8 @@ class OrderDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Order
         exclude = ["order_completion_code"]
+
+
+class OrderDetailUserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Order
