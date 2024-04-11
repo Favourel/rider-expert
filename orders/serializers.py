@@ -1,3 +1,4 @@
+from accounts.serializers import CustomerSerializer, RiderDetailSerializer
 from rest_framework import serializers
 from .models import Order
 
@@ -45,6 +46,8 @@ class OrderDetailSerializer(serializers.ModelSerializer):
 
 class OrderDetailUserSerializer(serializers.ModelSerializer):
     cost = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    customer = CustomerSerializer(read_only=True)
+    rider = RiderDetailSerializer(read_only=True)
 
     class Meta:
         model = Order

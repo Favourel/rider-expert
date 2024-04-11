@@ -121,3 +121,21 @@ class RiderSerializer(serializers.ModelSerializer):
             "bank_code",
             "bvn",
         )
+
+
+class RiderDetailSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
+
+    class Meta:
+        model = Rider
+        fields = (
+            "user",
+            "vehicle_type",
+            "vehicle_registration_number",
+            "min_capacity",
+            "max_capacity",
+            "fragile_item_allowed",
+            "charge_per_km",
+            "ratings",
+            "completed_orders",
+        )
