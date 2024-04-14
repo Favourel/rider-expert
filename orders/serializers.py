@@ -59,7 +59,6 @@ class OrderDetailSerializer(serializers.ModelSerializer):
             "value",
             "fragile",
             "price",
-            "cost",
             "status",
             "customer",
             "rider",
