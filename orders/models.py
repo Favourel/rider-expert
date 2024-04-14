@@ -23,9 +23,7 @@ class Order(models.Model):
     pickup_address = models.TextField()
     pickup_lat = models.FloatField(blank=True, null=True)
     pickup_long = models.FloatField(blank=True, null=True)
-    status = models.CharField(
-        max_length=20, choices=STATUS_CHOICES, default="Created"
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="Created")
     recipient_name = models.CharField(max_length=100)
     recipient_address = models.TextField()
     recipient_lat = models.FloatField(blank=True, null=True)
@@ -43,6 +41,13 @@ class Order(models.Model):
     price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    duration = models.DecimalField(
+        null=True,
+        blank=True,
+        max_digits=5,
+        decimal_places=2,
+    )
+    distance = models.CharField(max_length=10, blank=True, null=True)
 
     def __str__(self):
         return f"Order {self.pk} - {self.status}"

@@ -39,9 +39,33 @@ class OrderSerializer(serializers.ModelSerializer):
 
 
 class OrderDetailSerializer(serializers.ModelSerializer):
+    customer = CustomerSerializer(read_only=True)
+    rider = RiderDetailSerializer(read_only=True)
+
     class Meta:
         model = Order
-        exclude = ["order_completion_code"]
+        fields = [
+            "id",
+            "name",
+            "pickup_lat",
+            "pickup_long",
+            "pickup_address",
+            "recipient_name",
+            "recipient_lat",
+            "recipient_long",
+            "recipient_address",
+            "recipient_phone_number",
+            "weight",
+            "value",
+            "fragile",
+            "price",
+            "cost",
+            "status",
+            "customer",
+            "rider",
+            "distance",
+            "duration",
+        ]
 
 
 class OrderDetailUserSerializer(serializers.ModelSerializer):
@@ -71,4 +95,6 @@ class OrderDetailUserSerializer(serializers.ModelSerializer):
             "customer",
             "rider",
             "order_completion_code",
+            "distance",
+            "duration",
         ]

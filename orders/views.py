@@ -399,17 +399,6 @@ class AssignOrderToRiderView(APIView):
             distance = result[0]["distance"]
             duration = result[0]["duration"]
 
-            order_info = {
-                "id": order.id,
-                "name": order.name,
-                "weight": order.weight,
-                "value": order.value,
-                "quantity": order.quantity,
-                "fragile": order.fragile,
-                "recipient_name": order.recipient_name,
-                "recipient_address": order.recipient_address,
-            }
-
             # Send notification to the rider
             rider_message = (
                 f"Order Accepted: Order is {distance} km and {duration} away"
@@ -419,11 +408,13 @@ class AssignOrderToRiderView(APIView):
             code = generate_otp(length=4)
 
             # Update the order price and save the order
-            order.price = decimal.Decimal(price) * 100
             wallet.balance -= decimal.Decimal(price) * 100
-            order.order_completion_code = code
             wallet.updated_at = timezone.now()
             wallet.save()
+            order.distance = distance
+            order.duration = duration
+            order.price = decimal.Decimal(price) * 100
+            order.order_completion_code = code
             order.save()
 
             WalletTransaction.objects.create(
@@ -442,7 +433,7 @@ class AssignOrderToRiderView(APIView):
             customer_message = f"Order Assigned successfully: {rider.user.get_full_name} is {distance} km and {duration} away. Order code: {code}"
 
             # Serialize the updated order and attach distance and duration
-            serializer = OrderSerializer(order)
+            serializer = OrderDetailSerializer(order)
             response_data = serializer.data
             response_data["distance"] = distance
             response_data["duration"] = duration
