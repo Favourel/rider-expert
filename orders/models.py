@@ -41,12 +41,7 @@ class Order(models.Model):
     price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    duration = models.DecimalField(
-        null=True,
-        blank=True,
-        max_digits=5,
-        decimal_places=2,
-    )
+    duration = models.CharField(null=True, blank=True, max_length=30)
     distance = models.CharField(max_length=10, blank=True, null=True)
 
     def __str__(self):
