@@ -147,6 +147,11 @@ def send_customer_notification(
 
 
 @shared_task
+def create_on_table(email, table):
+    supabase.create_on_table(email, table)
+
+
+@shared_task
 def send_riders_notification(
     riders,
     price=None,

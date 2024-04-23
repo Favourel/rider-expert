@@ -10,7 +10,7 @@ from rest_framework.serializers import ValidationError
 from rest_framework import generics, status
 from .serializers import *
 from .models import *
-from .utils import send_verification_email
+from .utils import create_on_table, send_verification_email
 import logging
 
 
@@ -94,6 +94,8 @@ class BaseRegistrationView(generics.CreateAPIView):
                             send_verification_email.delay(user.id, "registration")
 
                             # Return a response with the serialized user object and a success message
+                            table = "riders" if self.user_model == Rider else "customers"
+                            create_on_table.delay(user.email, table)
                             return Response(
                                 {
                                     "data": user_obj_serializer,

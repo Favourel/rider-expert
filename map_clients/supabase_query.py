@@ -105,6 +105,20 @@ class SupabaseTransactions:
         except Exception as e:
             self.handle_error(e)
 
+    def create_on_table(
+        self,
+        email,
+        table,
+    ):
+        try:
+            self.supabase.table(table).insert(
+                {
+                    "email": email,
+                }
+            ).execute()
+        except Exception as e:
+            self.handle_error(e)
+
     def handle_error(self, error):
         logger.error(f"Supabase API error: {str(error)}")
         raise error
