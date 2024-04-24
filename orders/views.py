@@ -147,11 +147,12 @@ class GetAvailableRidersView(APIView):
         riders_location_data = supabase.get_supabase_riders(fields=fields)
 
         # Fetch all Rider objects that meet the conditions in a single query
+        fragile_query = {"fragile_item_allowed": True} if is_fragile else {}
         rider_queryset = Rider.objects.filter(
             user__email__in=[rider["email"] for rider in riders_location_data],
-            fragile_item_allowed=is_fragile,
             min_capacity__lte=item_weight,
             max_capacity__gte=item_weight,
+            **fragile_query,
         )
 
         # Create a dictionary to map rider emails to rider objects
