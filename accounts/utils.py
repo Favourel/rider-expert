@@ -147,8 +147,8 @@ def send_customer_notification(
 
 
 @shared_task
-def create_on_table(email, table):
-    supabase.create_on_table(email, table)
+def create_on_table(table, data):
+    supabase.create_on_table(table, data)
 
 
 @shared_task

@@ -107,15 +107,11 @@ class SupabaseTransactions:
 
     def create_on_table(
         self,
-        email,
         table,
+        data,
     ):
         try:
-            self.supabase.table(table).insert(
-                {
-                    "email": email,
-                }
-            ).execute()
+            self.supabase.table(table).insert(data).execute()
         except Exception as e:
             self.handle_error(e)
 

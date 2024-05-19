@@ -34,6 +34,12 @@ class BaseRegistrationView(generics.CreateAPIView):
                     "vehicle_registration_number"
                 ],
             }
+    def get_user_supabase_creation_info (user_type, user):
+        return (
+            ("riders", {"rider_email": user.email})
+            if user_type == Rider
+            else ("customers", {"email": user.email})
+        )
 
     @transaction.atomic
     def post(self, request, *args, **kwargs):
@@ -94,8 +100,8 @@ class BaseRegistrationView(generics.CreateAPIView):
                             send_verification_email.delay(user.id, "registration")
 
                             # Return a response with the serialized user object and a success message
-                            table = "riders" if self.user_model == Rider else "customers"
-                            create_on_table.delay(user.email, table)
+                            table, data = self.get_user_supabase_creation_info(self.user_model,user)
+                            create_on_table.delay(table, data)
                             return Response(
                                 {
                                     "data": user_obj_serializer,
