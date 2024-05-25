@@ -34,7 +34,7 @@ class BaseRegistrationView(generics.CreateAPIView):
                     "vehicle_registration_number"
                 ],
             }
-    def get_user_supabase_creation_info (user_type, user):
+    def get_user_supabase_creation_info(self,user_type, user):
         return (
             ("riders", {"rider_email": user.email})
             if user_type == Rider
