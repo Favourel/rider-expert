@@ -1,6 +1,7 @@
 from django.db import transaction, IntegrityError
 from django.contrib.auth import authenticate
 from django.utils import timezone
+from django.conf import settings
 from accounts.paystack import PaystackServices
 from wallet.models import Wallet
 from .tokens import create_jwt_pair_for_user
@@ -79,11 +80,16 @@ class BaseRegistrationView(generics.CreateAPIView):
                             user=user,
                             code=paystack_user_data["customer_code"],
                         )
+                        bank_code = (
+                            "007"
+                            if settings.ENVIRON == "test"
+                            else request.data["bank_code"]
+                        )
                         if self.user_model == Rider:
                             (
                                 paystack_api.validate_customer(
                                     request.data["account_number"],
-                                    request.data["bank_code"],
+                                    bank_code,
                                     request.data["bvn"],
                                 )
                                 if is_created
