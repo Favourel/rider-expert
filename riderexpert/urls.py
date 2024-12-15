@@ -22,4 +22,6 @@ urlpatterns = [
     path("account/", include("accounts.urls")),
     path("order/", include("orders.urls")),
     path("wallet/", include("wallet.urls")),
+
+    path('multi_rider/', include('multi_orders.urls'))
 ]

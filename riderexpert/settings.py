@@ -36,10 +36,13 @@ PAYSTACK_SECRET_KEY = "sk_test_b57e5f2e8977cd3fd0a0dd257a73a2e35d361c47"
 SECRET_KEY = "django-insecure-q--wp)4sq%ly16dr1&0(+71jihbdwxsg#%o7qk7o67(qru1-+&"
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get("DEBUG", "False") == "True"
+# DEBUG = os.environ.get("DEBUG", "False") == "True"
+DEBUG = True
 
-ALLOWED_HOSTS = ["*"]
-CSRF_TRUSTED_ORIGINS = ["https://*.ngrok.io", "http://localhost:3000/"]
+ALLOWED_HOSTS = ["*", "rider-expert.onrender.com"]
+CSRF_TRUSTED_ORIGINS = ["https://*.ngrok.io", "http://localhost:3000",
+                        'https://*.ngrok-free.app', "https://rider-expert.onrender.com"]
+CORS_ALLOW_ALL_ORIGINS = True # for dev
 
 # Application definition
 
@@ -59,6 +62,8 @@ INSTALLED_APPS = [
     "adrf",
     "map_clients",
     "wallet",
+
+    "multi_orders.apps.MultiOrdersConfig"
 ]
 
 MIDDLEWARE = [
@@ -73,7 +78,7 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-CORS_ALLOWED_ORIGINS = ["https://*.ngrok.io", "http://localhost:3000"]
+CORS_ALLOWED_ORIGINS = ["https://*.ngrok.io", "http://localhost:3000", "https://rider-expert.onrender.com"]
 
 ROOT_URLCONF = "riderexpert.urls"
 
@@ -99,37 +104,53 @@ WSGI_APPLICATION = "riderexpert.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/4.1/ref/settings/#databases
 
-ENVIRON = os.environ.get("ENVIRON")
+# ENVIRON = os.environ.get("ENVIRON")
+#
+# if ENVIRON and ENVIRON == "test":
+#     # Replace the SQLite DATABASES configuration with PostgreSQL:
+#     DATABASES = {
+#         "default": dj_database_url.config(  # Replace this value with your local database's connection string.
+#             default=os.environ.get("DATABASE_URL"),
+#             conn_max_age=600,
+#         )
+#     }
+#
+# else:
+#     DATABASES = {
+#         "custom": {
+#             "ENGINE": "django.db.backends.postgresql",
+#             "NAME": "riderexpert",
+#             "USER": "riderexpert",
+#             "PASSWORD": "testdatabase",
+#             "HOST": "db",
+#             "PORT": os.environ.get("DJANGO_DB_PORT", "5432"),
+#         },
+#         "default": {
+#             "ENGINE": "django.db.backends.postgresql",
+#             "NAME": os.environ.get("DJANGO_DB_NAME", "default_db_name"),
+#             "USER": os.environ.get("DJANGO_DB_USER", "default_db_user"),
+#             "PASSWORD": os.environ.get("DJANGO_DB_PASSWORD", "default_db_password"),
+#             "HOST": os.environ.get("DJANGO_DB_HOST", "localhost"),
+#             "PORT": os.environ.get("DJANGO_DB_PORT", "5432"),
+#         },
+#     }
+# DATABASES = {
+#     'default': {
+#         'ENGINE': "django.db.backends.postgresql",
+#         'NAME': "riderexpect",
+#         'USER': "riderexpect",
+#         'PASSWORD': "riderexpect",
+#         'HOST': "localhost",
+#         'PORT': "5432",
+#     }
+# }
 
-if ENVIRON and ENVIRON == "test":
-    # Replace the SQLite DATABASES configuration with PostgreSQL:
-    DATABASES = {
-        "default": dj_database_url.config(  # Replace this value with your local database's connection string.
-            default=os.environ.get("DATABASE_URL"),
-            conn_max_age=600,
-        )
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
-
-else:
-    DATABASES = {
-        "custom": {
-            "ENGINE": "django.db.backends.postgresql",
-            "NAME": "riderexpert",
-            "USER": "riderexpert",
-            "PASSWORD": "testdatabase",
-            "HOST": "db",
-            "PORT": os.environ.get("DJANGO_DB_PORT", "5432"),
-        },
-        "default": {
-            "ENGINE": "django.db.backends.postgresql",
-            "NAME": os.environ.get("DJANGO_DB_NAME", "default_db_name"),
-            "USER": os.environ.get("DJANGO_DB_USER", "default_db_user"),
-            "PASSWORD": os.environ.get("DJANGO_DB_PASSWORD", "default_db_password"),
-            "HOST": os.environ.get("DJANGO_DB_HOST", "localhost"),
-            "PORT": os.environ.get("DJANGO_DB_PORT", "5432"),
-        },
-    }
-
+}
 
 # Password validation
 # https://docs.djangoproject.com/en/4.1/ref/settings/#auth-password-validators
