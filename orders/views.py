@@ -19,6 +19,9 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+from multi_orders.models import OrderRiderAssignment
+from multi_orders.views import BulkOrderAssignmentView, AcceptOrDeclineOrderAssignmentView
 from wallet.models import PendingWalletTransaction, WalletTransaction
 from .models import DeclinedOrder, Order
 from accounts.models import Rider
@@ -73,128 +76,264 @@ class CreateOrderView(APIView):
 
     @transaction.atomic
     def post(self, request, *args, **kwargs):
+        is_bulk = request.data.get("is_bulk", False)
         serializer = OrderSerializer(data=request.data)
-
-        recipient_lat = request.data.get("recipient_lat")
-        recipient_long = request.data.get("recipient_long")
-
-        pickup_lat = request.data.get("pickup_lat")
-        pickup_long = request.data.get("pickup_long")
-
-        order_location = f"{pickup_long},{pickup_lat}"
-        recipient_location = f"{recipient_long},{recipient_lat}"
 
         if serializer.is_valid():
             serializer.validated_data["customer"] = request.user.customer
+            if is_bulk:
+                return self.create_bulk_order(serializer, request)
+            else:
+                return self.create_single_order(serializer, request)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-            riders_within_radius = get_rider_available(
-                self.SEARCH_RADIUS_KM, order_location
+    def create_single_order(self, serializer, request):
+        recipient_lat = request.data.get("recipient_lat")
+        recipient_long = request.data.get("recipient_long")
+        pickup_lat = request.data.get("pickup_lat")
+        pickup_long = request.data.get("pickup_long")
+        order_location = f"{pickup_long},{pickup_lat}"
+        recipient_location = f"{recipient_long},{recipient_lat}"
+
+        riders_within_radius = get_rider_available(self.SEARCH_RADIUS_KM, order_location)
+
+        if riders_within_radius:
+            cost = get_ride_average_cost(riders_within_radius, order_location, recipient_location)
+            serializer.save()
+            response_data = serializer.data
+            response_data["cost"] = cost
+            return Response(response_data, status=status.HTTP_201_CREATED)
+        else:
+            return Response(
+                {"error": "No riders found within the search radius."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
-            if riders_within_radius:
-                cost = get_ride_average_cost(
-                    riders_within_radius, order_location, recipient_location
-                )
-                serializer.save()
-                # Include cost in serializer data
-                response_data = serializer.data
-                response_data["cost"] = cost
+    def create_bulk_order(self, serializer, request):
+        destinations = request.data.get("destinations", [])
+        total_weight = Decimal(request.data.get("total_weight", 0))
+        pickup_lat = request.data.get("pickup_lat")
+        pickup_long = request.data.get("pickup_long")
+        order_location = f"{pickup_long},{pickup_lat}"
 
-                return Response(response_data, status=status.HTTP_201_CREATED)
-            else:
+        if not destinations or total_weight <= 0:
+            return Response({"error": "Invalid bulk order data."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Validate destination format
+        for destination in destinations:
+            if "lat" not in destination or "long" not in destination:
                 return Response(
-                    {"error": "No riders found within the search radius."},
+                    {"error": "Each destination must include 'lat' and 'long'."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        # Get riders within the search radius
+        riders_within_radius = get_rider_available(self.SEARCH_RADIUS_KM, order_location)
+
+        if not riders_within_radius:
+            return Response(
+                {"error": "No riders found within the search radius."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Calculate the average cost for each trip
+        costs = []
+        for destination in destinations:
+            recipient_location = f"{destination['long']},{destination['lat']}"
+            cost = get_ride_average_cost(riders_within_radius, order_location, recipient_location)
+            costs.append(cost)
+
+        # Save the bulk order
+        bulk_order = serializer.save(is_bulk=True, total_weight=total_weight)
+
+        # Distribute weight across destinations
+        weight_per_destination = total_weight // len(destinations)  # Integer division
+        remaining_weight = total_weight % len(destinations)  # Calculate remainder
+
+        sub_orders = []
+
+        for index, destination in enumerate(destinations):
+            # Assign the remaining weight to the last destination
+            assigned_weight = weight_per_destination + (remaining_weight if index == len(destinations) - 1 else 0)
+
+            sub_orders.append(
+                OrderRiderAssignment(
+                    order=bulk_order,
+                    customer=bulk_order.customer,
+                    order__pickup_address=bulk_order.pickup_address,
+                    order__pickup_lat=bulk_order.pickup_lat,
+                    order__pickup_long=bulk_order.pickup_long,
+                    recipient_lat=destination["lat"],
+                    recipient_long=destination["long"],
+                    assigned_weight=assigned_weight,  # Assign calculated weight
+                    fragile=bulk_order.fragile,
+                    status="Pending",
+                    price=costs[index],  # Assign calculated cost to each sub-order
+                )
+            )
+
+        OrderRiderAssignment.objects.bulk_create(sub_orders)
+        return Response(
+            {"message": "Bulk order created successfully.",
+             "bulk_order_id": bulk_order.id,
+             "total_cost": round(sum(costs), 2),
+             },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class GetAvailableRidersView(APIView):
     permission_classes = [IsAuthenticated]
-    SEARCH_RADIUS_KM = 5
+    SEARCH_RADIUS_KM = 5  # Define the maximum search radius for riders in kilometers.
 
-    def validate_parameters(self, price_offer):
-        """Validate input parameters."""
+    def validate_parameters(self, price_offer, order, is_bulk):
+        """
+        Validate input parameters for the request.
+
+        Parameters:
+        - price_offer: The price the customer is willing to pay.
+        - order: The order object to process.
+        - is_bulk: Boolean flag indicating if the order is a bulk order.
+
+        Returns:
+        - Tuple (is_valid: bool, message: str): Validation status and error message if invalid.
+        """
         try:
+            # Ensure the price offer is a valid float.
             price_offer = float(price_offer)
         except ValueError as e:
             logger.error(e)
-            return False, f"Invalid or missing parameters, {e}"
+            return False, f"Invalid or missing price parameter: {e}"
+
+        # Ensure the order is valid and handle bulk order-specific validations.
+        if not isinstance(order, Order):
+            return False, "Invalid or missing order parameter"
 
         if not all(isinstance(param, (float, int)) for param in [price_offer]):
             return False, "Invalid or missing parameters"
+
+        if is_bulk:
+            if not order.destinations or not isinstance(order.destinations, list):
+                return False, "Missing or invalid destinations for bulk order"
+            if order.weight <= 0:
+                return False, "Invalid total weight for bulk order"
+
         return True, ""
 
     def get(self, request, *args, **kwargs):
+        """
+        Handle GET requests to fetch available riders for an order.
+
+        Parameters:
+        - request: The HTTP request object.
+
+        Returns:
+        - Response: Contains the status, available riders, or error message.
+        """
+        # Get parameters from the request
         price_offer = request.GET.get("price")
         order_id = request.GET.get("order_id")
-        order = get_object_or_404(Order, id=int(order_id))
-        item_weight = order.weight
+        order = get_object_or_404(Order, id=int(order_id))  # Fetch the order by ID or return 404 if not found.
+
+        is_bulk = order.is_bulk  # Check if the order is a bulk order.
+
+        # Validate parameters
+        is_valid, validation_message = self.validate_parameters(price_offer, order, is_bulk)
+        if not is_valid:
+            return Response(
+                {"status": "error", "message": validation_message}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Extract customer and order details
+        customer = request.user.customer
         origin_lat = order.pickup_lat
         origin_long = order.pickup_long
         is_fragile = order.fragile
 
-        customer = request.user.customer
-
-        is_valid, validation_message = self.validate_parameters(price_offer)
-        if not is_valid:
-            return Response(
-                {"status": "error", "message": validation_message}, status=400
-            )
-
+        # Format origin coordinates for distance calculations
         origin = f"{origin_long},{origin_lat}"
+
+        # Fetch rider location data from the Supabase service
         fields = ["rider_email", "current_lat", "current_long"]
         riders_location_data = supabase.get_supabase_riders(fields=fields)
 
-        # Fetch all Rider objects that meet the conditions in a single query
+        # Filter riders based on item weight, capacity, and fragility
         fragile_query = {"fragile_item_allowed": True} if is_fragile else {}
         rider_queryset = Rider.objects.filter(
             user__email__in=[rider["email"] for rider in riders_location_data],
-            min_capacity__lte=item_weight,
-            max_capacity__gte=item_weight,
+            min_capacity__lte=order.total_weight if is_bulk else order.weight,
+            max_capacity__gte=order.total_weight if is_bulk else order.weight,
             **fragile_query,
         )
 
-        # Create a dictionary to map rider emails to rider objects
+        # Create a mapping of rider emails to Rider objects for efficient lookup
         rider_email_to_rider = {rider.user.email: rider for rider in rider_queryset}
 
-        # Iterate through riders_location_data and filter the Rider objects
+        # Compile a list of riders with their current locations
         riders = []
         for rider in riders_location_data:
             rider_email = rider["email"]
             if rider_email in rider_email_to_rider:
-                rider_info = {
+                riders.append({
                     "email": rider_email,
-                    "location": rider["location"],
-                }
-                riders.append(rider_info)
+                    "location": f"{rider['current_long']},{rider['current_lat']}"
+                })
 
-        if riders and origin:
-            calculator = DistanceCalculator(origin)
-            location_within_radius = calculator.destinations_within_radius(
-                riders, self.SEARCH_RADIUS_KM
+        # If no riders are found, send a notification to the customer
+        if not riders or not origin:
+            send_customer_notification.delay(
+                customer=customer.user.email, message="No rider found within radius"
             )
-            if not location_within_radius:
-                send_customer_notification.delay(
-                    customer=customer.user.email, message="No rider around you"
-                )
-            else:
-                try:
-                    results = self.get_matrix_results(origin, location_within_radius)
+            return Response(
+                {"status": "error", "message": "No riders found within search radius."},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
-                except Exception as e:
-                    logger.error(f"Error processing API request: {str(e)}")
-                    map_clients_manager.switch_client()
-                    results = self.get_matrix_results(origin, location_within_radius)
-            send_riders_notification.delay(
-                results,
-                price=price_offer,
-                request_coordinates={"long": origin_long, "lat": origin_lat},
-                order_id=order_id,
+        # Handle single or bulk order logic
+        destinations = (
+            [origin] + [f"{dest['long']},{dest['lat']}" for dest in order.destinations]
+            if is_bulk else [f"{order.recipient_long},{order.recipient_lat}"]
+        )
+
+        # Use the DistanceCalculator to find riders within the search radius
+        calculator = DistanceCalculator(origin)
+        locations_within_radius = calculator.destinations_within_radius(riders, self.SEARCH_RADIUS_KM)
+
+        # If no locations are within the radius, notify the customer
+        if not locations_within_radius:
+            send_customer_notification.delay(
+                customer=customer.user.email, message="No rider around you"
             )
+            return Response(
+                {"status": "error", "message": "No riders found within search radius."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Use Matrix API to calculate distances and durations for riders and destinations
+        try:
+            results = self.get_matrix_results(origin, locations_within_radius)
+        except Exception as e:
+            # Handle API errors gracefully by switching clients and retrying
+            logger.error(f"Error processing API request: {str(e)}")
+            map_clients_manager.switch_client()
+            results = self.get_matrix_results(origin, locations_within_radius)
+
+        # Send notifications to riders with the order details and price offer
+        send_riders_notification.delay(
+            results,
+            price=price_offer,
+            request_coordinates={"long": origin_long, "lat": origin_lat},
+            order_id=order_id,
+        )
+
+        # Update order status to indicate that rider search has started
         order.status = "RiderSearch"
         order.save()
+
+        # Serialize the order data to include in the response
         order_data = OrderDetailUserSerializer(order).data
+
+        # Return a success response
         return Response(
             {
                 **order_data,
@@ -205,7 +344,17 @@ class GetAvailableRidersView(APIView):
         )
 
     def get_matrix_results(self, origin, destinations):
-        """Get results from Matrix API."""
+        """
+        Fetch distance and duration data from a Matrix API.
+
+        Parameters:
+        - origin: The starting point of the trip.
+        - destinations: List of destination coordinates.
+
+        Returns:
+        - results: API response containing distances and durations.
+        """
+        # Use the map client to get distances and durations
         map_client = map_clients_manager.get_client()
         results = map_client.get_distances_duration(origin, destinations)
         return results
@@ -265,6 +414,10 @@ class AcceptOrDeclineOrderView(APIView):
         # Get authenticated rider from request
         rider = request.user.rider_profile
         order = get_object_or_404(Order, id=order_id)
+
+        # Call the bulk order app
+        if order.is_bulk:
+            return AcceptOrDeclineOrderAssignmentView().post(request, *args, **kwargs)
 
         if accept and reason is None:
             pickup_lat = order.pickup_lat
