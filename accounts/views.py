@@ -237,68 +237,73 @@ class ResendTokenView(APIView):
 
 class LoginView(APIView):
     def post(self, request, *args, **kwargs):
-        """
-        Handle POST requests to the API endpoint.
-
-        Args:
-            request: The request object containing the data.
-            *args: Additional positional arguments.
-            **kwargs: Additional keyword arguments.
-
-        Returns:
-            A response object with the appropriate tokens and status code.
-        """
-        # Get the email and password from the request data
-        email = request.data.get("email").lower()
-        password = request.data.get("password")
-
-        # Check if email or password is missing
-        if not email or not password:
-            return self.invalid_credentials_response()
-
-        # Authenticate the user with the provided email and password
-        user = authenticate(request, email=email, password=password)
-
-        # Check if user is None (invalid credentials)
-        if user is None:
-            return self.invalid_credentials_response()
-
-        if hasattr(user, "rider_profile"):
-            paystack_user = PaystackServices().fetch_customer(user.wallet.code)
-            is_identified = paystack_user["identified"]
-            if not is_identified:
-                return self.unverified_response("Identity not verified.")
-
-        # Check if user's email is not verified
-        if not user.is_verified:
-            return self.unverified_response("Email is not verified.")
-
-        # Create JWT tokens for the authenticated user
-        tokens = create_jwt_pair_for_user(user)
-
-        user_type = ""
-
         try:
-            user.customer
-            user_type = "customer"
-        except AttributeError:
-            try:
-                user.rider
-                user_type = "rider"
-            except AttributeError:
-                pass
 
-        # Return the tokens with a 200 OK status code
-        return Response(
-            {
-                **tokens,
-                "user_type": user_type,
-                "email": user.email,
-                "name": user.get_full_name,
-                "balance": user.wallet.balance,
-            },
-            status=status.HTTP_200_OK,
-        )
+            """
+            Handle POST requests to the API endpoint.
+    
+            Args:
+                request: The request object containing the data.
+                *args: Additional positional arguments.
+                **kwargs: Additional keyword arguments.
+    
+            Returns:
+                A response object with the appropriate tokens and status code.
+            """
+            # Get the email and password from the request data
+            email = request.data.get("email").lower()
+            password = request.data.get("password")
+
+            # Check if email or password is missing
+            if not email or not password:
+                return self.invalid_credentials_response()
+
+            # Authenticate the user with the provided email and password
+            user = authenticate(request, email=email, password=password)
+
+            # Check if user is None (invalid credentials)
+            if user is None:
+                return self.invalid_credentials_response()
+
+            if hasattr(user, "rider_profile"):
+                paystack_user = PaystackServices().fetch_customer(user.wallet.code)
+                is_identified = paystack_user["identified"]
+                if not is_identified:
+                    return self.unverified_response("Identity not verified.")
+
+            # Check if user's email is not verified
+            if not user.is_verified:
+                return self.unverified_response("Email is not verified.")
+
+            # Create JWT tokens for the authenticated user
+            tokens = create_jwt_pair_for_user(user)
+
+            user_type = ""
+
+            try:
+                user.customer
+                user_type = "customer"
+            except AttributeError:
+                try:
+                    user.rider
+                    user_type = "rider"
+                except AttributeError:
+                    pass
+
+            # Return the tokens with a 200 OK status code
+            return Response(
+                {
+                    **tokens,
+                    "user_type": user_type,
+                    "email": user.email,
+                    "name": user.get_full_name,
+                    "balance": user.wallet.balance,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as err:
+            return Response({"error": str(err)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def invalid_credentials_response(self):
         return Response(

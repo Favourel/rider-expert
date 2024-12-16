@@ -10,6 +10,9 @@ class Wallet(models.Model):
     created_at = models.DateTimeField(blank=True, auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    def __str__(self):
+        return f"{self.user}: {self.balance}"
+
 
 class WalletTransaction(models.Model):
     TRANSACTION_CHOICES = [
@@ -37,6 +40,9 @@ class WalletTransaction(models.Model):
     created_at = models.DateTimeField()
     paid_at = models.DateTimeField()
 
+    def __str__(self):
+        return f"{self.wallet.user}: {self.transaction_type} for {self.amount} = {self.transaction_status}"
+
 
 class PendingWalletTransaction(models.Model):
     TRANSACTION_STATUSES = [
@@ -52,3 +58,7 @@ class PendingWalletTransaction(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.user}: {self.order} for {self.amount} = {self.transaction_status}"
+

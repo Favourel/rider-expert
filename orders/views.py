@@ -411,6 +411,12 @@ class AcceptOrDeclineOrderView(APIView):
         accept = request.data.get("accept")
         reason = request.data.get("reason")
 
+        if not order_id:
+            return Response(
+                {"error": "Order ID is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         # Get authenticated rider from request
         rider = request.user.rider_profile
         order = get_object_or_404(Order, id=order_id)

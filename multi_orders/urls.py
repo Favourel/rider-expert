@@ -1,18 +1,20 @@
 from django.urls import path
 from .views import (BulkOrderAssignmentView, RealTimeOrderTrackingView, AcceptOrDeclineOrderAssignmentView,
-                    BulkOrderSummaryView, FeedbackView, CancelOrderView
+                    BulkOrderSummaryView, FeedbackView, CancelOrderView, UpdateBulkOrderStatusView
                     )
 
 
 urlpatterns = [
-    path('orders/bulk-assign/', BulkOrderAssignmentView.as_view(), name='bulk_order_assign'),
+    path('accept-decline/', AcceptOrDeclineOrderAssignmentView.as_view(), name='update_assignment_status'),
 
-    path('orders/<int:order_id>/tracking/', RealTimeOrderTrackingView.as_view(), name='order_tracking'),
-    path('orders/<int:bulk_order_id>/bulk-summary/', BulkOrderSummaryView.as_view(), name='bulk_order_summary'),
+    path('bulk-assign/', BulkOrderAssignmentView.as_view(), name='bulk_order_assign'),
 
-    path('orders/accept-decline/', AcceptOrDeclineOrderAssignmentView.as_view(), name='update_assignment_status'),
+    path('update-order-status/', UpdateBulkOrderStatusView.as_view(), name='bulk_order_assign'),
 
-    path('orders/<int:order_id>/feedback/', FeedbackView.as_view(), name='order_feedback'),
-    path('orders/<int:order_id>/cancel/', CancelOrderView.as_view(), name='cancel_order'),
+    path('<int:order_id>/tracking/', RealTimeOrderTrackingView.as_view(), name='order_tracking'),
+    path('<int:order_id>/bulk-summary/', BulkOrderSummaryView.as_view(), name='bulk_order_summary'),
+
+    path('<int:order_id>/feedback/', FeedbackView.as_view(), name='order_feedback'),
+    path('<int:order_id>/cancel/', CancelOrderView.as_view(), name='cancel_order'),
 
 ]

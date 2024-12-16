@@ -4,6 +4,7 @@ from django.db import transaction
 from django.db.models import Q, Avg, Sum, Count
 from django.shortcuts import render, get_object_or_404
 from rest_framework import status
+from rest_framework.generics import GenericAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -35,16 +36,27 @@ logger = logging.getLogger(__name__)
 # Create your views here.
 
 
-class AcceptOrDeclineOrderAssignmentView(APIView, MultiRiderOrderErrorHandlingMixin):
+class AcceptOrDeclineOrderAssignmentView(GenericAPIView, MultiRiderOrderErrorHandlingMixin):
+    """
+    API view for riders to accept or decline their assigned sub-order in a bulk order.
+    """
     permission_classes = [IsAuthenticated]
 
     @transaction.atomic
     def post(self, request, *args, **kwargs):
         try:
-            order_id = request.data.get('order_id')
-            accept = request.data.get('accept', False)
-            reason = request.data.get("reason", '')
+            # Parse and validate input
+            order_id = request.data.get("order_id")
+            accept = request.data.get("accept", False)
+            reason = request.data.get("reason", "")
 
+            if not order_id:
+                return Response(
+                    {"error": "Order ID is required."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Get authenticated rider and assignment
             rider = request.user.rider_profile
             order_assignment = get_object_or_404(
                 OrderRiderAssignment,
@@ -52,88 +64,182 @@ class AcceptOrDeclineOrderAssignmentView(APIView, MultiRiderOrderErrorHandlingMi
                 rider=rider
             )
 
-            if accept:
-                order_assignment.status = 'Accepted'
-                order_assignment.save()
+            # Handle acceptance
+            if accept and not reason:
+                return self.handle_assignment_acceptance(order_assignment)
 
-                """Update overall order status based on rider assignments."""
-                assignments = order_assignment.order.orderriderassignment_set.all()
+            # Handle rejection
+            if not accept and reason:
+                return self.handle_assignment_rejection(order_assignment, rider, reason)
 
-                if all(assignment.status == 'Accepted' for assignment in assignments):
-                    order_assignment.order.status = 'Assigned'
-                elif any(assignment.status == 'Accepted' for assignment in assignments):
-                    order_assignment.order.status = 'PartiallyAssigned'
-
-                order_assignment.order.save()
-
-            else:
-                order_assignment.status = 'Declined'
-                order_assignment.save()
-
-                rider.declined_requests += 1
-                rider.save()
-                # Create and save DeclinedOrder instance
-                DeclinedOrder.objects.create(
-                    order=order_assignment.order,
-                    customer=None,
-                    rider=rider,
-                    decline_reason=reason,
-                )
-                self.find_replacement_rider(order_assignment)
-
-            return Response({'message': 'Order status updated'})
+            # Invalid request
+            return Response(
+                {"error": "Provide either accept=True or a reason for rejection."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            logger.error(f"Error in AcceptOrDeclineOrderAssignmentView: {str(e)}")
+            return Response(
+                {"error": "An unexpected error occurred.", "details": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    def handle_assignment_acceptance(self, order_assignment):
+        """
+        Handles the acceptance of an order assignment by a rider.
+
+        Args:
+            order_assignment (OrderRiderAssignment): The assignment being accepted.
+
+        Returns:
+            Response: Success message with updated order and rider details.
+        """
+        try:
+            # Get related order and rider details
+            order = order_assignment.order
+            rider = order_assignment.rider
+
+            # Prepare coordinates for distance and duration calculation
+            pickup_lat = order.pickup_lat
+            pickup_long = order.pickup_long
+            recipient_lat = order.recipient_lat
+            recipient_long = order.recipient_long
+
+            order_location = f"{pickup_long},{pickup_lat}"
+            recipient_location = f"{recipient_long},{recipient_lat}"
+
+            # Fetch rider data from Supabase
+            conditions = [{"column": "rider_email", "value": rider.user.email}]
+            fields = ["rider_email", "current_lat", "current_long"]
+            rider_data = supabase.get_supabase_riders(conditions=conditions, fields=fields)
+
+            # Calculate distance and duration
+            try:
+                result = self.get_matrix_results(order_location, rider_data)
+            except Exception as e:
+                logger.error(f"Error processing API request: {str(e)}")
+                map_clients_manager.switch_client()
+                result = self.get_matrix_results(order_location, rider_data)
+
+            distance = result[0]["distance"]
+            duration = result[0]["duration"]
+
+            # Calculate trip distance and cost
+            trip_distance = get_distance(order_location, recipient_location)
+            cost_of_ride = round(float(rider.charge_per_km) * trip_distance, 2)
+
+            # Update the order assignment and parent order
+            order_assignment.status = "Accepted"
+            order_assignment.distance = distance
+            order_assignment.duration = duration
+            order_assignment.assigned_weight = order.total_weight  # Example: Can be adjusted based on bulk logic
+            order_assignment.save()
+
+            # Update parent order status based on all assignments
+            assignments = order.orderriderassignment_set.all()
+            if all(assignment.status == "Accepted" for assignment in assignments):
+                order.status = "Assigned"
+            elif any(assignment.status == "Accepted" for assignment in assignments):
+                order.status = "PartiallyAssigned"
+            order.save()
+
+            # Notify customer
+            rider_info = {
+                "rider_name": rider.user.get_full_name(),
+                "rider_email": rider.user.email,
+                "vehicle_number": rider.vehicle_registration_number,
+                "rating": rider.ratings if rider.ratings is not None else 0,
+                "distance": f"{distance:.2f} km",
+                "duration": f"{duration} minutes",
+                "order_completed": rider.completed_orders,
+                "price": f"{cost_of_ride:.2f}",
+            }
+            send_customer_notification.delay(
+                customer=order.customer.user.email,
+                message="Your order has been accepted by the rider!",
+                rider_info=rider_info,
+            )
+
+            return Response(
+                {"message": "Assignment accepted successfully.", "rider_info": rider_info},
+                status=status.HTTP_200_OK,
+            )
+        except Exception as e:
+            logger.error(f"Error accepting assignment {order_assignment.id}: {str(e)}")
+            raise
+
+    def handle_assignment_rejection(self, order_assignment, rider, reason):
+        """
+        Handles the rejection of an order assignment by a rider.
+
+        Args:
+            order_assignment (OrderRiderAssignment): The assignment being rejected.
+            rider (Rider): The rider rejecting the assignment.
+            reason (str): The reason for rejection.
+
+        Returns:
+            Response: Success message indicating rejection.
+        """
+        try:
+            order_assignment.status = "Declined"
+            order_assignment.save()
+
+            # Update rider statistics
+            rider.declined_requests += 1
+            rider.save()
+
+            # Log declined order
+            DeclinedOrder.objects.create(
+                order=order_assignment.order,
+                customer=None,
+                rider=rider,
+                decline_reason=reason,
+            )
+
+            # Find replacement rider
+            self.find_replacement_rider(order_assignment)
+
+            return Response(
+                {"message": "Assignment declined successfully."},
+                status=status.HTTP_200_OK,
+            )
+        except Exception as e:
+            logger.error(f"Error rejecting assignment {order_assignment.id}: {str(e)}")
+            raise
 
     def find_replacement_rider(self, declined_assignment):
         """
-        Find a replacement rider for a declined order assignment
+        Finds a replacement rider for a declined order assignment.
 
         Args:
-            declined_assignment (OrderRiderAssignment): The declined rider assignment
+            declined_assignment (OrderRiderAssignment): The declined assignment.
 
         Returns:
-            Rider or None: A suitable replacement rider
+            Rider or None: A replacement rider if found.
         """
-        order = declined_assignment.order
-        declined_weight = declined_assignment.assigned_weight
-
-        # Logging the replacement process
-        logger.info(
-            f"Initiating replacement rider search for Order {order.id}",
-            extra={
-                'order_id': order.id,
-                'declined_rider_email': declined_assignment.rider.user.email,
-                'declined_weight': float(declined_weight)
-            }
-        )
-
-        # Find alternative riders who can handle the declined weight
-        alternative_riders = Rider.objects.filter(
-            Q(max_capacity__gte=declined_weight) &  # Can handle the weight
-            Q(min_capacity__lte=declined_weight) &  # Minimum capacity check
-            Q(fragile_item_allowed=order.fragile) &  # Fragile item handling
-            ~Q(id=declined_assignment.rider.id)  # Exclude the original declined rider
-        ).exclude(
-            # Exclude riders already assigned to this order
-            id__in=order.riders.values_list('id', flat=True)
-        )
-
-        # Prioritize riders based on proximity and availability
         try:
+            order = declined_assignment.order
+            declined_weight = declined_assignment.assigned_weight
             pickup_location = f"{order.pickup_long},{order.pickup_lat}"
 
-            # Use distance calculation to find the closest suitable rider
+            # Find suitable alternative riders
+            alternative_riders = Rider.objects.filter(
+                max_capacity__gte=declined_weight,
+                min_capacity__lte=declined_weight,
+                fragile_item_allowed=order.fragile
+            ).exclude(
+                id__in=[declined_assignment.rider.id] + list(order.riders.values_list("id", flat=True))
+            )
+
+            # Fetch rider locations and prioritize by proximity
             fields = ["rider_email", "current_lat", "current_long"]
             riders_location_data = supabase.get_supabase_riders(fields=fields)
-
             distance_calculator = DistanceCalculator(pickup_location)
 
-            # Filter and sort riders by proximity
             nearby_suitable_riders = [
                 rider for rider in riders_location_data
-                if rider['email'] in alternative_riders.values_list('user__email', flat=True)
+                if rider["email"] in alternative_riders.values_list("user__email", flat=True)
             ]
 
             nearby_suitable_riders.sort(
@@ -142,59 +248,68 @@ class AcceptOrDeclineOrderAssignmentView(APIView, MultiRiderOrderErrorHandlingMi
                 )
             )
 
+            # Assign closest rider
             if nearby_suitable_riders:
-                closest_rider_email = nearby_suitable_riders[0]['email']
+                closest_rider_email = nearby_suitable_riders[0]["email"]
                 replacement_rider = Rider.objects.get(user__email=closest_rider_email)
 
-                # Create new rider assignment
-                new_assignment = OrderRiderAssignment.objects.create(
+                OrderRiderAssignment.objects.create(
                     order=order,
                     rider=replacement_rider,
                     assigned_weight=declined_weight,
-                    status='Pending'
+                    status="Pending",
                 )
 
-                # Notify the replacement rider
                 send_riders_notification.delay(
                     riders=[replacement_rider],
                     order_id=order.id,
                     assigned_weight=declined_weight,
-                    replacement_notification=True
+                    replacement_notification=True,
                 )
 
-                # Logging successful replacement
                 logger.info(
-                    f"Replacement rider found for Order {order.id}",
-                    extra={
-                        'order_id': order.id,
-                        'replacement_rider_email': replacement_rider.user.email,
-                        'assigned_weight': float(declined_weight)
-                    }
+                    f"Replacement rider {replacement_rider.user.email} assigned for Order {order.id}"
                 )
-
                 return replacement_rider
 
         except Exception as e:
-            # Comprehensive error handling for replacement process
             logger.error(
-                f"Error finding replacement rider for Order {order.id}",
-                extra={
-                    'order_id': order.id,
-                    'error_type': type(e).__name__,
-                    'error_details': str(e)
-                }
+                f"Error finding replacement rider for Order {declined_assignment.order.id}: {str(e)}"
             )
-
-            # Escalate if no replacement found
             self.handle_order_assignment_errors(
-                order,
-                'partial_assignment_failure'
+                declined_assignment.order,
+                "partial_assignment_failure"
             )
-
             return None
 
 
-class BulkOrderAssignmentView(APIView):
+        # except Exception as e:
+        #     # Comprehensive error handling for replacement process
+        #     logger.error(
+        #         f"Error finding replacement rider for Order {order.id}",
+        #         extra={
+        #             'order_id': order.id,
+        #             'error_type': type(e).__name__,
+        #             'error_details': str(e)
+        #         }
+        #     )
+        #
+        #     # Escalate if no replacement found
+        #     self.handle_order_assignment_errors(
+        #         order,
+        #         'partial_assignment_failure'
+        #     )
+        #
+        #     return None
+
+    def get_matrix_results(self, origin, destinations):
+        """Get results from Matrix API."""
+        map_client = map_clients_manager.get_client()
+        results = map_client.get_distances_duration(origin, destinations)
+        return results
+
+
+class BulkOrderAssignmentView(GenericAPIView):
     """
     View for bulk assignment of orders to riders, supporting splitting orders among multiple riders.
     """
@@ -329,105 +444,109 @@ class BulkOrderAssignmentView(APIView):
         return results
 
 
-class UpdateBulkOrderStatusView(APIView):
+class UpdateBulkOrderStatusView(GenericAPIView):
     permission_classes = [IsAuthenticated]
 
     @transaction.atomic
     def post(self, request, *args, **kwargs):
-        orders_data = request.data.get("orders", [])
+        try:
+            orders_data = request.data.get("orders", [])
 
-        if not orders_data:
-            return Response(
-                {"error": "Orders data is required."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        valid_statuses = [choice[0] for choice in Order.STATUS_CHOICES]
-        successful_updates = []
-        failed_updates = []
-
-        for order_data in orders_data:
-            order_id = order_data.get("order_id")
-            order_status = order_data.get("status")
-            order_code = order_data.get("order_code")
-
-            if not order_id or not order_status:
-                failed_updates.append(
-                    {
-                        "order_id": order_id,
-                        "error": "Both order_id and status are required.",
-                    }
-                )
-                continue
-
-            if order_status not in valid_statuses:
-                failed_updates.append(
-                    {
-                        "order_id": order_id,
-                        "error": f"Invalid status: {order_status}",
-                    }
-                )
-                continue
-
-            try:
-                order = Order.objects.get(id=order_id)
-
-                if order_status == "Delivered":
-                    if not order_code:
-                        failed_updates.append(
-                            {
-                                "order_id": order_id,
-                                "error": "order_code is required for Delivered status.",
-                            }
-                        )
-                        continue
-
-                    if order.order_completion_code != order_code:
-                        failed_updates.append(
-                            {
-                                "order_id": order_id,
-                                "error": "Invalid order code.",
-                            }
-                        )
-                        continue
-
-                order.status = order_status
-                order.save()
-
-                send_customer_notification(
-                    customer=order.customer.user.email,
-                    message=f"Status update {order_status}",
-                    ride_status=order_status,
-                    by_pass_rider_info=True,
+            if not orders_data:
+                return Response(
+                    {"error": "Orders data is required."},
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
 
-                successful_updates.append(
-                    {
-                        "order_id": order_id,
-                        "status": order_status,
-                    }
-                )
+            valid_statuses = [choice[0] for choice in Order.STATUS_CHOICES]
+            successful_updates = []
+            failed_updates = []
 
-            except Order.DoesNotExist:
-                failed_updates.append(
-                    {"order_id": order_id, "error": "Order not found."}
-                )
+            for order_data in orders_data:
+                order_id = order_data.get("order_id")
+                order_status = order_data.get("status")
+                order_code = order_data.get("order_code")
 
-            except Exception as e:
-                logger.error(f"Error updating order {order_id}: {str(e)}")
-                failed_updates.append(
-                    {"order_id": order_id, "error": str(e)}
-                )
+                if not order_id or not order_status:
+                    failed_updates.append(
+                        {
+                            "order_id": order_id,
+                            "error": "Both order_id and status are required.",
+                        }
+                    )
+                    continue
 
-        response_data = {
-            "message": "Bulk order status update completed.",
-            "successful_updates": successful_updates,
-            "failed_updates": failed_updates,
-        }
-        return Response(response_data, status=status.HTTP_200_OK)
+                if order_status not in valid_statuses:
+                    failed_updates.append(
+                        {
+                            "order_id": order_id,
+                            "error": f"Invalid status: {order_status}",
+                        }
+                    )
+                    continue
+
+                try:
+                    order = Order.objects.get(id=order_id)
+
+                    if order_status == "Delivered":
+                        if not order_code:
+                            failed_updates.append(
+                                {
+                                    "order_id": order_id,
+                                    "error": "order_code is required for Delivered status.",
+                                }
+                            )
+                            continue
+
+                        if order.order_completion_code != order_code:
+                            failed_updates.append(
+                                {
+                                    "order_id": order_id,
+                                    "error": "Invalid order code.",
+                                }
+                            )
+                            continue
+
+                    order.status = order_status
+                    order.save()
+
+                    send_customer_notification(
+                        customer=order.customer.user.email,
+                        message=f"Status update {order_status}",
+                        ride_status=order_status,
+                        by_pass_rider_info=True,
+                    )
+
+                    successful_updates.append(
+                        {
+                            "order_id": order_id,
+                            "status": order_status,
+                        }
+                    )
+
+                except Order.DoesNotExist:
+                    failed_updates.append(
+                        {"order_id": order_id, "error": "Order not found."}
+                    )
+
+                except Exception as e:
+                    logger.error(f"Error updating order {order_id}: {str(e)}")
+                    failed_updates.append(
+                        {"order_id": order_id, "error": str(e)}
+                    )
+
+            response_data = {
+                "message": "Bulk order status update completed.",
+                "successful_updates": successful_updates,
+                "failed_updates": failed_updates,
+            }
+            return Response(response_data, status=status.HTTP_200_OK)
+
+        except Exception as err:
+            return Response({"error": str(err)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class RealTimeOrderTrackingView(APIView):
+class RealTimeOrderTrackingView(GenericAPIView):
     permission_classes = [IsAuthenticated]
     SEARCH_RADIUS_KM = 5
 
@@ -501,7 +620,7 @@ class RealTimeOrderTrackingView(APIView):
         return results
 
 
-class BulkOrderSummaryView(APIView):
+class BulkOrderSummaryView(GenericAPIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, order_id):
@@ -564,7 +683,7 @@ class BulkOrderSummaryView(APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class FeedbackView(APIView):
+class FeedbackView(GenericAPIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, order_id, *args, **kwargs):
@@ -584,7 +703,7 @@ class FeedbackView(APIView):
             return Response({"error": "Could not submit feedback."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class CancelOrderView(APIView):
+class CancelOrderView(GenericAPIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, order_id, *args, **kwargs):

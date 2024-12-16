@@ -1,0 +1,555 @@
+openapi: 3.0.3
+info:
+  title: Rider Expert Api
+  version: 0.0.0
+paths:
+  /account/customers/:
+    post:
+      operationId: account_customers_create
+      tags:
+      - account
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Customer'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Customer'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Customer'
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+          description: ''
+  /account/login/:
+    post:
+      operationId: account_login_create
+      description: |-
+        Handle POST requests to the API endpoint.
+
+        Args:
+            request: The request object containing the data.
+            *args: Additional positional arguments.
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            A response object with the appropriate tokens and status code.
+      tags:
+      - account
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /account/reset_password/:
+    post:
+      operationId: account_reset_password_create
+      tags:
+      - account
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /account/riders/:
+    post:
+      operationId: account_riders_create
+      tags:
+      - account
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Rider'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Rider'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Rider'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Rider'
+          description: ''
+  /account/token/create:
+    post:
+      operationId: account_token_create_create
+      description: |-
+        Takes a set of user credentials and returns an access and refresh JSON web
+        token pair to prove the authentication of those credentials.
+      tags:
+      - account
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPair'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPair'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPair'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenObtainPair'
+          description: ''
+  /account/token/refresh:
+    post:
+      operationId: account_token_refresh_create
+      description: |-
+        Takes a refresh type JSON web token and returns an access type JSON web
+        token if the refresh token is valid.
+      tags:
+      - account
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRefresh'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenRefresh'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenRefresh'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenRefresh'
+          description: ''
+  /account/token/verify:
+    post:
+      operationId: account_token_verify_create
+      description: |-
+        Takes a token and indicates if it is valid.  This view provides no
+        information about a token's fitness for a particular use.
+      tags:
+      - account
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenVerify'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenVerify'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenVerify'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenVerify'
+          description: ''
+  /account/verify-email/:
+    post:
+      operationId: account_verify_email_create
+      description: |-
+        Handle POST requests to validate the verification token, mark the user's email as verified,
+        and return a response with a success message or error message.
+      tags:
+      - account
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /account/verify-rider/:
+    post:
+      operationId: account_verify_rider_create
+      tags:
+      - account
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /multi_rider/orders/{bulk_order_id}/bulk-summary/:
+    get:
+      operationId: multi_rider_orders_bulk_summary_retrieve
+      description: |-
+        Comprehensive order tracking and reporting endpoint
+        Provides detailed insights into multi-rider order status
+      parameters:
+      - in: path
+        name: bulk_order_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - multi_rider
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /multi_rider/orders/{order_id}/cancel/:
+    post:
+      operationId: multi_rider_orders_cancel_create
+      parameters:
+      - in: path
+        name: order_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - multi_rider
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /multi_rider/orders/{order_id}/feedback/:
+    post:
+      operationId: multi_rider_orders_feedback_create
+      parameters:
+      - in: path
+        name: order_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - multi_rider
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /multi_rider/orders/{order_id}/tracking/:
+    get:
+      operationId: multi_rider_orders_tracking_retrieve
+      parameters:
+      - in: path
+        name: order_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - multi_rider
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /multi_rider/orders/accept-decline/:
+    post:
+      operationId: multi_rider_orders_accept_decline_create
+      description: API view for riders to accept or decline their assigned sub-order
+        in a bulk order.
+      tags:
+      - multi_rider
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /multi_rider/orders/bulk-assign/:
+    post:
+      operationId: multi_rider_orders_bulk_assign_create
+      description: View for bulk assignment of orders to riders, supporting splitting
+        orders among multiple riders.
+      tags:
+      - multi_rider
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /order/{order_id}/:
+    get:
+      operationId: order_retrieve
+      parameters:
+      - in: path
+        name: order_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - order
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /order/accept/:
+    post:
+      operationId: order_accept_create
+      tags:
+      - order
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /order/assign/:
+    post:
+      operationId: order_assign_create
+      description: |-
+        This method handles the POST request to assign an order to a rider.
+        It assigns the rider to the order, updates the order status, and sends notifications to both the rider and the customer.
+      tags:
+      - order
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /order/create/:
+    post:
+      operationId: order_create_create
+      tags:
+      - order
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /order/current/{email}/:
+    get:
+      operationId: order_current_retrieve
+      parameters:
+      - in: path
+        name: email
+        schema:
+          type: string
+        required: true
+      tags:
+      - order
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /order/get-rider/:
+    get:
+      operationId: order_get_rider_retrieve
+      description: |-
+        Handle GET requests to fetch available riders for an order.
+
+        Parameters:
+        - request: The HTTP request object.
+
+        Returns:
+        - Response: Contains the status, available riders, or error message.
+      tags:
+      - order
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /order/update-order-status/:
+    post:
+      operationId: order_update_order_status_create
+      tags:
+      - order
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /wallet/credit-rider-wallet/:
+    post:
+      operationId: wallet_credit_rider_wallet_create
+      tags:
+      - wallet
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /wallet/debit-wallet-balance/:
+    post:
+      operationId: wallet_debit_wallet_balance_create
+      tags:
+      - wallet
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /wallet/get-wallet-balance/:
+    get:
+      operationId: wallet_get_wallet_balance_retrieve
+      tags:
+      - wallet
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /wallet/wallet-wh/:
+    post:
+      operationId: wallet_wallet_wh_create
+      tags:
+      - wallet
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+components:
+  schemas:
+    Customer:
+      type: object
+      properties:
+        user:
+          allOf:
+          - $ref: '#/components/schemas/User'
+          readOnly: true
+      required:
+      - user
+    Rider:
+      type: object
+      properties:
+        user:
+          allOf:
+          - $ref: '#/components/schemas/User'
+          readOnly: true
+        vehicle_type:
+          type: string
+          maxLength: 50
+        vehicle_registration_number:
+          type: string
+          maxLength: 20
+        min_capacity:
+          type: integer
+          nullable: true
+        max_capacity:
+          type: integer
+          nullable: true
+        fragile_item_allowed:
+          type: boolean
+        charge_per_km:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,4}(?:\.\d{0,2})?$
+          nullable: true
+        ratings:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,1}(?:\.\d{0,2})?$
+          nullable: true
+        account_number:
+          type: string
+          maxLength: 10
+        bank_code:
+          type: string
+          maxLength: 10
+        bvn:
+          type: string
+          maxLength: 11
+      required:
+      - account_number
+      - bank_code
+      - bvn
+      - user
+      - vehicle_registration_number
+    TokenObtainPair:
+      type: object
+      properties:
+        email:
+          type: string
+          writeOnly: true
+        password:
+          type: string
+          writeOnly: true
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+          readOnly: true
+      required:
+      - access
+      - email
+      - password
+      - refresh
+    TokenRefresh:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+          writeOnly: true
+      required:
+      - access
+      - refresh
+    TokenVerify:
+      type: object
+      properties:
+        token:
+          type: string
+          writeOnly: true
+      required:
+      - token
+    User:
+      type: object
+      description: |-
+        Serializer for the CustomUser model. It includes custom validation for the password
+        and email fields
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        first_name:
+          type: string
+          maxLength: 30
+        last_name:
+          type: string
+          maxLength: 30
+        phone_number:
+          type: string
+          maxLength: 15
+        password:
+          type: string
+          writeOnly: true
+        confirm_password:
+          type: string
+          writeOnly: true
+      required:
+      - confirm_password
+      - email
+      - first_name
+      - last_name
+      - password
+      - phone_number
+  securitySchemes:
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
