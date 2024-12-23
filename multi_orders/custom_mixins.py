@@ -16,6 +16,7 @@ from accounts.utils import (
 )
 from multi_orders.models import SupportTicket, OrderRiderAssignment
 from orders.models import Order
+from django.utils.deprecation import MiddlewareMixin
 
 # Initialize external dependencies
 map_clients_manager = MapClientsManager()
@@ -324,3 +325,9 @@ class MultiRiderOrderErrorHandlingMixin:
                 'current_status': order.status
             }
         )
+
+
+class DisableCSRFMiddleware(MiddlewareMixin):
+    def process_request(self, request):
+        if request.path.startswith('/bulk-order/'):  # Exempt paths starting with '/api/'
+            setattr(request, '_dont_enforce_csrf_checks', True)

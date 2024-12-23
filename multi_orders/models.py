@@ -7,7 +7,7 @@ from accounts.models import Rider, Customer
 
 
 class OrderRiderAssignment(models.Model):
-    customer = models.ForeignKey(Customer, on_delete=models.CASCADE)
+    customer = models.ForeignKey(Customer, on_delete=models.CASCADE, null=True, blank=True)
 
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="assignments")
     rider = models.ForeignKey(Rider, on_delete=models.CASCADE, related_name="assignments")
@@ -37,6 +37,7 @@ class OrderRiderAssignment(models.Model):
 
 
 class Feedback(models.Model):
+    customer = models.ForeignKey(Customer, on_delete=models.CASCADE, null=True, blank=True)
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="feedback")
     rating = models.IntegerField()
     comments = models.TextField()
@@ -47,6 +48,8 @@ class Feedback(models.Model):
 
 
 class SupportTicket(models.Model):
+    customer = models.ForeignKey(Customer, on_delete=models.CASCADE, null=True, blank=True)
+
     subject = models.CharField(max_length=255)
     description = models.TextField()
     status = models.CharField(

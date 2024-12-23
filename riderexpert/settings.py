@@ -42,7 +42,8 @@ DEBUG = True
 ALLOWED_HOSTS = ["*", "rider-expert.onrender.com"]
 CSRF_TRUSTED_ORIGINS = ["https://*.ngrok.io", "http://localhost:3000",
                         'https://*.ngrok-free.app', "https://rider-expert.onrender.com"]
-CORS_ALLOW_ALL_ORIGINS = True # for dev
+
+CORS_ALLOW_ALL_ORIGINS = True  # for dev
 
 # Application definition
 
@@ -74,6 +75,7 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
+    'multi_orders.custom_mixins.DisableCSRFMiddleware',
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
@@ -203,6 +205,9 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
         # Other authentication classes as needed
+    ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',
     ),
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }

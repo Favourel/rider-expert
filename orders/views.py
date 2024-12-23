@@ -76,16 +76,23 @@ class CreateOrderView(APIView):
 
     @transaction.atomic
     def post(self, request, *args, **kwargs):
-        is_bulk = request.data.get("is_bulk", False)
-        serializer = OrderSerializer(data=request.data)
+        try:
+            is_bulk = request.data.get("is_bulk", False)
+            serializer = OrderSerializer(data=request.data)
 
-        if serializer.is_valid():
-            serializer.validated_data["customer"] = request.user.customer
-            if is_bulk:
-                return self.create_bulk_order(serializer, request)
-            else:
-                return self.create_single_order(serializer, request)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            if serializer.is_valid():
+                serializer.validated_data["customer"] = request.user.customer
+                if is_bulk:
+                    return self.create_bulk_order(serializer, request)
+                else:
+                    return self.create_single_order(serializer, request)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error(f"Error in AcceptOrDeclineOrderAssignmentView: {str(e)}")
+            return Response(
+                {"error": "An unexpected error occurred.", "details": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
     def create_single_order(self, serializer, request):
         recipient_lat = request.data.get("recipient_lat")

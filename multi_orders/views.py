@@ -3,6 +3,8 @@ import decimal
 from django.db import transaction
 from django.db.models import Q, Avg, Sum, Count
 from django.shortcuts import render, get_object_or_404
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
 from rest_framework.generics import GenericAPIView
 from rest_framework.permissions import IsAuthenticated
@@ -36,7 +38,7 @@ logger = logging.getLogger(__name__)
 # Create your views here.
 
 
-class AcceptOrDeclineOrderAssignmentView(GenericAPIView, MultiRiderOrderErrorHandlingMixin):
+class AcceptOrDeclineOrderAssignmentView(APIView, MultiRiderOrderErrorHandlingMixin):
     """
     API view for riders to accept or decline their assigned sub-order in a bulk order.
     """
@@ -309,7 +311,7 @@ class AcceptOrDeclineOrderAssignmentView(GenericAPIView, MultiRiderOrderErrorHan
         return results
 
 
-class BulkOrderAssignmentView(GenericAPIView):
+class BulkOrderAssignmentView(APIView):
     """
     View for bulk assignment of orders to riders, supporting splitting orders among multiple riders.
     """
@@ -444,7 +446,7 @@ class BulkOrderAssignmentView(GenericAPIView):
         return results
 
 
-class UpdateBulkOrderStatusView(GenericAPIView):
+class UpdateBulkOrderStatusView(APIView):
     permission_classes = [IsAuthenticated]
 
     @transaction.atomic
@@ -546,7 +548,7 @@ class UpdateBulkOrderStatusView(GenericAPIView):
             return Response({"error": str(err)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class RealTimeOrderTrackingView(GenericAPIView):
+class RealTimeOrderTrackingView(APIView):
     permission_classes = [IsAuthenticated]
     SEARCH_RADIUS_KM = 5
 
@@ -620,7 +622,7 @@ class RealTimeOrderTrackingView(GenericAPIView):
         return results
 
 
-class BulkOrderSummaryView(GenericAPIView):
+class BulkOrderSummaryView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, order_id):
@@ -683,7 +685,7 @@ class BulkOrderSummaryView(GenericAPIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class FeedbackView(GenericAPIView):
+class FeedbackView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, order_id, *args, **kwargs):
@@ -695,15 +697,16 @@ class FeedbackView(GenericAPIView):
             if not (rating and comments):
                 return Response({"error": "Rating and comments are required."}, status=status.HTTP_400_BAD_REQUEST)
 
-            Feedback.objects.create(order=order, rating=rating, comments=comments)
+            Feedback.objects.create(customer=request.user, order=order, rating=rating, comments=comments)
 
             return Response({"message": "Feedback submitted successfully."}, status=status.HTTP_200_OK)
         except Exception as e:
             logger.error(f"Error submitting feedback: {str(e)}")
-            return Response({"error": "Could not submit feedback."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({"error": f"Could not submit feedback.: {str(e)}"},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class CancelOrderView(GenericAPIView):
+class CancelOrderView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, order_id, *args, **kwargs):
@@ -721,4 +724,4 @@ class CancelOrderView(GenericAPIView):
             return Response({"message": "Order cancelled successfully."}, status=status.HTTP_200_OK)
         except Exception as e:
             logger.error(f"Error cancelling order: {str(e)}")
-            return Response({"error": "Could not cancel order."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({"error": f"Could not cancel order.:{str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
