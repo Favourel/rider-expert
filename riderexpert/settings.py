@@ -258,6 +258,12 @@ LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
     "handlers": {
+        # 'file': {
+        #     'level': 'INFO',
+        #     'class': 'logging.FileHandler',
+        #     'filename': 'riderexpert.log',
+        #     'formatter': 'verbose',
+        # },
         "console": {
             "class": "logging.StreamHandler",
             "level": "INFO",  # Set the desired minimum log level for the console handler (INFO includes ERROR and WARNING)
@@ -285,3 +291,5 @@ LOGGING = {
         },
     },
 }
+
+ENVIRON = os.environ.get("ENVIRON", "test")

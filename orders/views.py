@@ -77,7 +77,13 @@ class CreateOrderView(APIView):
     @transaction.atomic
     def post(self, request, *args, **kwargs):
         try:
-            is_bulk = request.data.get("is_bulk", False)
+            is_bulk = request.data.get("is_bulk")
+            if is_bulk is None:
+                return Response(
+                    {"error": "'is_bulk' field is required."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
             serializer = OrderSerializer(data=request.data)
 
             if serializer.is_valid():
@@ -86,7 +92,9 @@ class CreateOrderView(APIView):
                     return self.create_bulk_order(serializer, request)
                 else:
                     return self.create_single_order(serializer, request)
+
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
         except Exception as e:
             logger.error(f"Error in AcceptOrDeclineOrderAssignmentView: {str(e)}")
             return Response(
@@ -118,73 +126,91 @@ class CreateOrderView(APIView):
 
     def create_bulk_order(self, serializer, request):
         destinations = request.data.get("destinations", [])
-        total_weight = Decimal(request.data.get("total_weight", 0))
+        weight = Decimal(request.data.get("weight", 0))
         pickup_lat = request.data.get("pickup_lat")
         pickup_long = request.data.get("pickup_long")
-        order_location = f"{pickup_long},{pickup_lat}"
+        pickup_address = request.data.get("pickup_address")
 
-        if not destinations or total_weight <= 0:
+        # Validate that the destinations and total weight are provided
+        if not destinations or weight <= 0:
             return Response({"error": "Invalid bulk order data."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Validate destination format
         for destination in destinations:
-            if "lat" not in destination or "long" not in destination:
+            required_fields = ["lat", "long", "recipient_name", "recipient_address", "recipient_phone_number"]
+            missing_fields = [field for field in required_fields if field not in destination]
+            if missing_fields:
                 return Response(
-                    {"error": "Each destination must include 'lat' and 'long'."},
+                    {
+                        "error": f"Each destination must include the following fields: {', '.join(required_fields)}. "
+                                 f"Missing: {', '.join(missing_fields)}"
+                    },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-        # Get riders within the search radius
+        # Validate pickup details
+        if not all([pickup_lat, pickup_long, pickup_address]):
+            return Response({"error": "Pickup location details are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Riders and cost calculation
+        order_location = f"{pickup_long},{pickup_lat}"
         riders_within_radius = get_rider_available(self.SEARCH_RADIUS_KM, order_location)
-
         if not riders_within_radius:
-            return Response(
-                {"error": "No riders found within the search radius."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return Response({"error": "No riders found within the search radius."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Calculate the average cost for each trip
+        # Calculate costs and save bulk order
         costs = []
         for destination in destinations:
             recipient_location = f"{destination['long']},{destination['lat']}"
             cost = get_ride_average_cost(riders_within_radius, order_location, recipient_location)
             costs.append(cost)
 
-        # Save the bulk order
-        bulk_order = serializer.save(is_bulk=True, total_weight=total_weight)
+        bulk_order = serializer.save(is_bulk=True, weight=weight, pickup_address=pickup_address)
 
-        # Distribute weight across destinations
-        weight_per_destination = total_weight // len(destinations)  # Integer division
-        remaining_weight = total_weight % len(destinations)  # Calculate remainder
+        # Distribute the total weight evenly across destinations
+        weight_per_destination = weight // len(destinations)
+        remaining_weight = weight % len(destinations)
 
         sub_orders = []
-
         for index, destination in enumerate(destinations):
             # Assign the remaining weight to the last destination
             assigned_weight = weight_per_destination + (remaining_weight if index == len(destinations) - 1 else 0)
-
             sub_orders.append(
                 OrderRiderAssignment(
                     order=bulk_order,
                     customer=bulk_order.customer,
-                    order__pickup_address=bulk_order.pickup_address,
-                    order__pickup_lat=bulk_order.pickup_lat,
-                    order__pickup_long=bulk_order.pickup_long,
+                    pickup_address=pickup_address,
+                    pickup_lat=pickup_lat,
+                    pickup_long=pickup_long,
+                    recipient_name=destination["recipient_name"],
+                    recipient_address=destination["recipient_address"],
                     recipient_lat=destination["lat"],
                     recipient_long=destination["long"],
-                    assigned_weight=assigned_weight,  # Assign calculated weight
+                    recipient_phone_number=destination["recipient_phone_number"],
+                    assigned_weight=assigned_weight,
                     fragile=bulk_order.fragile,
                     status="Pending",
-                    price=costs[index],  # Assign calculated cost to each sub-order
+                    price=costs[index],
                 )
             )
 
+        # Save all sub-orders in bulk
         OrderRiderAssignment.objects.bulk_create(sub_orders)
+
         return Response(
-            {"message": "Bulk order created successfully.",
-             "bulk_order_id": bulk_order.id,
-             "total_cost": round(sum(costs), 2),
-             },
+            {
+                "message": "Bulk order created successfully.",
+                "bulk_order_id": bulk_order.id,
+                "total_cost": round(sum(costs), 2),
+                "destinations": [
+                    {
+                        "recipient_name": destination["recipient_name"],
+                        "recipient_address": destination["recipient_address"],
+                        "price": costs[index],
+                        "assigned_weight": sub_orders[index].assigned_weight,
+                    }
+                    for index, destination in enumerate(destinations)
+                ],
+            },
             status=status.HTTP_201_CREATED,
         )
 
