@@ -136,7 +136,8 @@ class CreateOrderView(APIView):
             return Response({"error": "Invalid bulk order data."}, status=status.HTTP_400_BAD_REQUEST)
 
         for destination in destinations:
-            required_fields = ["lat", "long", "recipient_name", "recipient_address", "recipient_phone_number"]
+            required_fields = ["lat", "long", "recipient_name", "recipient_address", "recipient_phone_number",
+                               "package_name", "package_weight", "fragile"]
             missing_fields = [field for field in required_fields if field not in destination]
             if missing_fields:
                 return Response(
@@ -164,7 +165,8 @@ class CreateOrderView(APIView):
             cost = get_ride_average_cost(riders_within_radius, order_location, recipient_location)
             costs.append(cost)
 
-        bulk_order = serializer.save(is_bulk=True, weight=weight, pickup_address=pickup_address)
+        bulk_order = serializer.save(is_bulk=True)
+        # bulk_order = serializer.save(is_bulk=True, weight=weight, pickup_address=pickup_address)
 
         # Distribute the total weight evenly across destinations
         weight_per_destination = weight // len(destinations)
@@ -174,22 +176,33 @@ class CreateOrderView(APIView):
         for index, destination in enumerate(destinations):
             # Assign the remaining weight to the last destination
             assigned_weight = weight_per_destination + (remaining_weight if index == len(destinations) - 1 else 0)
+
             sub_orders.append(
                 OrderRiderAssignment(
-                    order=bulk_order,
                     customer=bulk_order.customer,
-                    pickup_address=pickup_address,
-                    pickup_lat=pickup_lat,
-                    pickup_long=pickup_long,
+                    order=bulk_order,
+
+                    package_name=destination["package_name"],
+                    package_weight=Decimal(destination["package_weight"]),
+                    price=costs[index],
+                    fragile=destination["fragile"],
+
                     recipient_name=destination["recipient_name"],
                     recipient_address=destination["recipient_address"],
                     recipient_lat=destination["lat"],
                     recipient_long=destination["long"],
                     recipient_phone_number=destination["recipient_phone_number"],
-                    assigned_weight=assigned_weight,
-                    fragile=bulk_order.fragile,
+
+                    pickup_address=pickup_address,
+                    pickup_lat=pickup_lat,
+                    pickup_long=pickup_long,
+
+                    # assigned_weight=assigned_weight,
+                    # fragile=bulk_order.fragile,
+                    assigned_weight=Decimal(destination["weight"]),
+                    sequence=index + 1,
                     status="Pending",
-                    price=costs[index],
+
                 )
             )
 
@@ -206,7 +219,11 @@ class CreateOrderView(APIView):
                         "recipient_name": destination["recipient_name"],
                         "recipient_address": destination["recipient_address"],
                         "price": costs[index],
-                        "assigned_weight": sub_orders[index].assigned_weight,
+                        # "assigned_weight": sub_orders[index].assigned_weight,
+
+                        "weight": Decimal(destination["package_weight"]),
+                        "fragile": destination.get("fragile"),
+                        "package_name": destination["package_name"],
                     }
                     for index, destination in enumerate(destinations)
                 ],

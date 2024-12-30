@@ -1,3 +1,4 @@
+from django.core.validators import MinValueValidator
 from django.db import models
 from orders.models import Order
 from accounts.models import Rider, Customer
@@ -10,21 +11,26 @@ class OrderRiderAssignment(models.Model):
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE, null=True, blank=True)
 
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="assignments")
-    rider = models.ForeignKey(Rider, on_delete=models.CASCADE, related_name="assignments")
+    rider = models.ForeignKey(Rider, on_delete=models.CASCADE, related_name="assignments", null=True, blank=True)
 
-    assigned_weight = models.DecimalField(max_digits=10, decimal_places=2)
+    package_name = models.CharField(max_length=255, null=True, blank=True)  # Name of the package
+    package_weight = models.DecimalField(max_digits=10, decimal_places=2, default=0, validators=[MinValueValidator(0)])
+    price = models.DecimalField(max_digits=10, decimal_places=2, default=0, validators=[MinValueValidator(0)])
+    fragile = models.BooleanField(default=False)  # Whether the package is fragile
+
+    recipient_name = models.CharField(max_length=255, null=True, blank=True)  # Name of the recipient
+    recipient_address = models.CharField(max_length=255, null=True, blank=True)  # Address of the recipient
+    recipient_lat = models.FloatField()  # Latitude of the recipient
+    recipient_long = models.FloatField()  # Longitude of the recipient
+    recipient_phone_number = models.CharField(max_length=15, null=True, blank=True)
+
+    pickup_address = models.CharField(max_length=255, null=True, blank=True)  # Pickup location address
+    pickup_lat = models.FloatField(default=0)  # Pickup latitude
+    pickup_long = models.FloatField(default=0)  # Pickup longitude
+
     assigned_at = models.DateTimeField(auto_now_add=True)
-
-    recipient_lat = models.FloatField()
-    recipient_long = models.FloatField()
-    destination = models.CharField(max_length=255)  # Latitude and longitude combined
-
     sequence = models.PositiveIntegerField()  # Delivery sequence
-    fragile = models.BooleanField(default=False)
-
     completed = models.BooleanField(default=False)
-
-    price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
 
     status = models.CharField(
         max_length=20,
@@ -33,7 +39,7 @@ class OrderRiderAssignment(models.Model):
     )
 
     def __str__(self):
-        return f"Rider {self.rider.user.get_full_name()} for Order {self.order.id}"
+        return f"Rider {self.rider.user.get_full_name() if self.rider else 'Unassigned'} for Order {self.order.id}"
 
 
 class Feedback(models.Model):
