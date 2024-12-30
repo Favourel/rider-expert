@@ -2,6 +2,8 @@ from django.db import transaction, IntegrityError
 from django.contrib.auth import authenticate
 from django.utils import timezone
 from django.conf import settings
+from rest_framework.permissions import AllowAny
+
 from accounts.paystack import PaystackServices
 from wallet.models import Wallet
 from .tokens import create_jwt_pair_for_user
@@ -236,6 +238,8 @@ class ResendTokenView(APIView):
 
 
 class LoginView(APIView):
+    permission_classes = [AllowAny]
+
     def post(self, request, *args, **kwargs):
         try:
 
