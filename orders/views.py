@@ -126,13 +126,13 @@ class CreateOrderView(APIView):
 
     def create_bulk_order(self, serializer, request):
         destinations = request.data.get("destinations", [])
-        weight = Decimal(request.data.get("weight", 0))
+        # weight = Decimal(request.data.get("weight", 0))
         pickup_lat = request.data.get("pickup_lat")
         pickup_long = request.data.get("pickup_long")
         pickup_address = request.data.get("pickup_address")
 
         # Validate that the destinations and total weight are provided
-        if not destinations or weight <= 0:
+        if not destinations:  # or weight <= 0:
             return Response({"error": "Invalid bulk order data."}, status=status.HTTP_400_BAD_REQUEST)
 
         for destination in destinations:

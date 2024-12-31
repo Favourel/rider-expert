@@ -59,14 +59,14 @@ class OrderSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         is_bulk = self.initial_data.get("is_bulk", False)
         if is_bulk:  # Validate for bulk orders
-            if not self.initial_data.get("weight"):
-                raise serializers.ValidationError({"weight": "This field is required for bulk orders."})
             if not self.initial_data.get("destinations"):
-                raise serializers.ValidationError({"destinations": "At least one destination is required for bulk orders."})
+                raise serializers.ValidationError(
+                    {"destinations": "At least one destination is required for bulk orders."})
 
             # Validate destinations format
             for destination in self.initial_data["destinations"]:
-                required_fields = ["lat", "long", "recipient_name", "recipient_address", "recipient_phone_number"]
+                required_fields = ["lat", "long", "recipient_name", "recipient_address", "recipient_phone_number",
+                                   "package_name", "package_weight", "fragile"]
                 missing_fields = [field for field in required_fields if field not in destination]
                 if missing_fields:
                     raise serializers.ValidationError(
