@@ -139,17 +139,154 @@ class MapClientsManager:
             logger.info(f"Switched to {next_client_name}, {self.client_name} is down")
 
 
+# def get_distance(origin, destination):
+#     api = settings.MAPBOX_API_KEY
+#     url = f"https://api.mapbox.com/directions/v5/mapbox/driving-traffic/{origin};{destination}?access_token={api}"
+#
+#     response = requests.get(url)
+#
+#     if response.status_code == 200:
+#         data = response.json()
+#         distance = data["routes"][0]["distance"]
+#         return round((distance / 1000), 2)
+#     else:
+#         raise Exception(
+#             f"Failed to get response. Status code: {response.status_code}. Error: {response.text}"
+#         )
+
+MAX_DISTANCE_KM = 5  # Maximum allowable distance in kilometers
+
+
+def validate_coordinates(coordinates):
+    try:
+        longitude, latitude = map(float, coordinates.split(","))
+        if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
+            raise ValueError("Coordinates are out of valid range.")
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
 def get_distance(origin, destination):
     api = settings.MAPBOX_API_KEY
     url = f"https://api.mapbox.com/directions/v5/mapbox/driving-traffic/{origin};{destination}?access_token={api}"
 
-    response = requests.get(url)
+    try:
+        response = requests.get(url, timeout=10)  # Added timeout for reliability
+        response.raise_for_status()  # Raise HTTPError for bad responses (4xx, 5xx)
 
-    if response.status_code == 200:
         data = response.json()
-        distance = data["routes"][0]["distance"]
-        return round((distance / 1000), 2)
-    else:
-        raise Exception(
-            f"Failed to get response. Status code: {response.status_code}. Error: {response.text}"
-        )
+        if "routes" in data and len(data["routes"]) > 0:
+            distance = data["routes"][0].get("distance")
+            if distance is not None:
+                return round(distance / 1000, 2)
+            else:
+                raise ValueError("Distance data is missing in the API response.")
+        else:
+            raise ValueError("No valid routes found in the API response.")
+    except requests.exceptions.RequestException as e:
+        # Log the detailed error for debugging
+        logger.error(f"Mapbox API error: {str(e)} | URL: {url}")
+
+        # Return a generic error message to the user
+        raise ValueError("Unable to calculate distance. Please try again later.")
+
+
+def validate_single_order(order):
+    """
+    Validate the distance between a pickup point and a single destination.
+
+    Args:
+        order (dict): Order data containing pickup and recipient details.
+
+    Returns:
+        dict: Error details if the delivery exceeds the maximum allowable distance,
+              or a success message if valid.
+    """
+    try:
+        # order = serializer.serialized_data
+        pickup_coords = f"{order['pickup_long']},{order['pickup_lat']}"
+        recipient_coords = f"{order['recipient_long']},{order['recipient_lat']}"
+
+        # Calculate distance between pickup and recipient
+        distance_km = get_distance(pickup_coords, recipient_coords)
+        print(distance_km)
+
+        # if distance_km > MAX_DISTANCE_KM:
+        #     return {
+        #         "error": "The delivery location is too far from the pickup point.",
+        #         "details": {
+        #             "recipient_name": order["recipient_name"],
+        #             "recipient_address": order["recipient_address"],
+        #             "distance_km": distance_km,
+        #             "message": (
+        #                 f"The recipient location is {distance_km} km away, exceeding the "
+        #                 f"maximum allowable distance of {MAX_DISTANCE_KM} km."
+        #             ),
+        #         },
+        #         "suggestion": (
+        #             "Please choose a closer delivery destination or split the delivery "
+        #             "into separate shipments within the allowable range."
+        #         ),
+        #     }
+
+        return {
+            "status": "The delivery location is within the allowable distance.",
+            "details": {
+                "recipient_name": order["recipient_name"],
+                "recipient_address": order["recipient_address"],
+                "distance_km": distance_km,
+            },
+        }
+    except ValueError as e:
+        return {
+            "error": "Failed to validate the delivery location.",
+            "details": str(e),
+            "suggestion": "Please ensure the provided coordinates are accurate and try again."
+        }
+
+
+def validate_distances(pickup_coords, destinations):
+    """
+    Validate the distances between a pickup point and multiple destinations.
+
+    Args:
+        pickup_coords (str): Pickup point coordinates in "longitude,latitude" format.
+        destinations (list): List of destination dictionaries with required fields.
+
+    Returns:
+        dict: Summary of errors if any destination exceeds the maximum allowable distance.
+    """
+    errors = []
+
+    for destination in destinations:
+        try:
+            distance_km = get_distance(pickup_coords, f"{destination['long']},{destination['lat']}")
+            if distance_km < MAX_DISTANCE_KM:
+                errors.append({
+                    "recipient_name": destination["recipient_name"],
+                    "recipient_address": destination["recipient_address"],
+                    "distance_km": distance_km,
+                    "message": (
+                        f"This location is {distance_km} km away, exceeding the "
+                        f"maximum allowable distance of {MAX_DISTANCE_KM} km."
+                    ),
+                })
+        except ValueError as e:
+            errors.append({
+                "recipient_name": destination["recipient_name"],
+                "recipient_address": destination["recipient_address"],
+                # "distance_km": None,
+                "message": f"Failed to calculate distance. Error: {str(e)}"
+            })
+
+    if errors:
+        return {
+            "error": "Some delivery locations are too far from the pickup point or delivery point.",
+            "details": errors,
+            "suggestion": (
+                "Please split the delivery into smaller batches or ensure all "
+                "destinations are within 5 km from the pickup point."
+            ),
+        }
+    return {"status": "All destinations are within the allowable distance."}

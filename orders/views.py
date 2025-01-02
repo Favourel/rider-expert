@@ -13,7 +13,8 @@ from accounts.utils import (
     send_riders_notification,
     str_to_bool,
 )
-from map_clients.map_clients import MapClientsManager, get_distance
+from map_clients.map_clients import MapClientsManager, get_distance, validate_distances, validate_single_order, \
+    validate_coordinates
 from map_clients.supabase_query import SupabaseTransactions
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -96,7 +97,7 @@ class CreateOrderView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         except Exception as e:
-            logger.error(f"Error in AcceptOrDeclineOrderAssignmentView: {str(e)}")
+            logger.error(f"Error in CreateOrderView: {str(e)}")
             return Response(
                 {"error": "An unexpected error occurred.", "details": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -105,10 +106,27 @@ class CreateOrderView(APIView):
     def create_single_order(self, serializer, request):
         recipient_lat = request.data.get("recipient_lat")
         recipient_long = request.data.get("recipient_long")
+
         pickup_lat = request.data.get("pickup_lat")
         pickup_long = request.data.get("pickup_long")
+
         order_location = f"{pickup_long},{pickup_lat}"
         recipient_location = f"{recipient_long},{recipient_lat}"
+
+        if not (validate_coordinates(order_location) and validate_coordinates(recipient_location)):
+            raise ValueError("Invalid coordinates provided.")
+
+        # Validate route distances
+        route_errors = validate_single_order(serializer.validated_data)
+        if "error" in route_errors:
+            return Response(
+                {
+                    "error": "Some delivery locations are too far from the pickup point.",
+                    "details": route_errors,
+
+                },
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
 
         riders_within_radius = get_rider_available(self.SEARCH_RADIUS_KM, order_location)
 
@@ -126,13 +144,12 @@ class CreateOrderView(APIView):
 
     def create_bulk_order(self, serializer, request):
         destinations = request.data.get("destinations", [])
-        # weight = Decimal(request.data.get("weight", 0))
         pickup_lat = request.data.get("pickup_lat")
         pickup_long = request.data.get("pickup_long")
         pickup_address = request.data.get("pickup_address")
 
         # Validate that the destinations and total weight are provided
-        if not destinations:  # or weight <= 0:
+        if not destinations:
             return Response({"error": "Invalid bulk order data."}, status=status.HTTP_400_BAD_REQUEST)
 
         for destination in destinations:
@@ -158,6 +175,17 @@ class CreateOrderView(APIView):
         if not riders_within_radius:
             return Response({"error": "No riders found within the search radius."}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Validate route distances
+        route_errors = validate_distances(order_location, destinations)
+        if "error" in route_errors:
+            return Response(
+                {
+                    "error": "Some delivery locations are too far from the pickup point.",
+                    "details": route_errors,
+
+                },
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
         # Calculate costs and save bulk order
         costs = []
         for destination in destinations:
@@ -169,13 +197,13 @@ class CreateOrderView(APIView):
         # bulk_order = serializer.save(is_bulk=True, weight=weight, pickup_address=pickup_address)
 
         # Distribute the total weight evenly across destinations
-        weight_per_destination = weight // len(destinations)
-        remaining_weight = weight % len(destinations)
+        # weight_per_destination = weight // len(destinations)
+        # remaining_weight = weight % len(destinations)
 
         sub_orders = []
         for index, destination in enumerate(destinations):
             # Assign the remaining weight to the last destination
-            assigned_weight = weight_per_destination + (remaining_weight if index == len(destinations) - 1 else 0)
+            # assigned_weight = weight_per_destination + (remaining_weight if index == len(destinations) - 1 else 0)
 
             sub_orders.append(
                 OrderRiderAssignment(
@@ -199,7 +227,6 @@ class CreateOrderView(APIView):
 
                     # assigned_weight=assigned_weight,
                     # fragile=bulk_order.fragile,
-                    assigned_weight=Decimal(destination["weight"]),
                     sequence=index + 1,
                     status="Pending",
 

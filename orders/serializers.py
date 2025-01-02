@@ -43,7 +43,7 @@ class OrderSerializer(serializers.ModelSerializer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Dynamically adjust required fields based on is_bulk
-        is_bulk = self.initial_data.get("is_bulk", False)
+        is_bulk = self.initial_data.get("is_bulk")
         if is_bulk:
             # Remove single order specific fields for bulk orders
             self.fields.pop("recipient_name", None)
@@ -54,10 +54,9 @@ class OrderSerializer(serializers.ModelSerializer):
         else:
             # Remove bulk order specific fields for single orders
             self.fields.pop("destinations", None)
-            # self.fields.pop("weight", None)
 
     def validate(self, attrs):
-        is_bulk = self.initial_data.get("is_bulk", False)
+        is_bulk = self.initial_data.get("is_bulk")
         if is_bulk:  # Validate for bulk orders
             if not self.initial_data.get("destinations"):
                 raise serializers.ValidationError(
