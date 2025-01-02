@@ -210,25 +210,6 @@ def validate_single_order(order):
 
         # Calculate distance between pickup and recipient
         distance_km = get_distance(pickup_coords, recipient_coords)
-        print(distance_km)
-
-        # if distance_km > MAX_DISTANCE_KM:
-        #     return {
-        #         "error": "The delivery location is too far from the pickup point.",
-        #         "details": {
-        #             "recipient_name": order["recipient_name"],
-        #             "recipient_address": order["recipient_address"],
-        #             "distance_km": distance_km,
-        #             "message": (
-        #                 f"The recipient location is {distance_km} km away, exceeding the "
-        #                 f"maximum allowable distance of {MAX_DISTANCE_KM} km."
-        #             ),
-        #         },
-        #         "suggestion": (
-        #             "Please choose a closer delivery destination or split the delivery "
-        #             "into separate shipments within the allowable range."
-        #         ),
-        #     }
 
         return {
             "status": "The delivery location is within the allowable distance.",

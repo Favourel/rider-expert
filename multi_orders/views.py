@@ -642,7 +642,7 @@ class BulkOrderSummaryView(APIView):
                         "long": assignment.recipient_long,
                     },
                     "status": assignment.status,
-                    'assigned_weight': assignment.assigned_weight,
+                    'assigned_weight': assignment.package_weight,
                     'rider_capacity': {
                         'min_capacity': assignment.rider.min_capacity,
                         'max_capacity': assignment.rider.max_capacity
@@ -657,15 +657,15 @@ class BulkOrderSummaryView(APIView):
                         extra={
                             'order_id': order_id,
                             'total_riders': len([assignment.rider for assignment in assignments]),
-                            'fulfilled_percentage': (bulk_order.fulfilled_weight / bulk_order.total_weight) * 100
+                            # 'fulfilled_percentage': (bulk_order.fulfilled_weight / bulk_order.total_weight) * 100
                         })
 
             return Response(
                 {
                     "bulk_order_id": bulk_order.id,
                     "total_weight": bulk_order.total_weight,
-                    'fulfilled_weight': bulk_order.fulfilled_weight,
-                    "remaining_weight": bulk_order.remaining_weight,
+                    # 'fulfilled_weight': bulk_order.fulfilled_weight,
+                    # "remaining_weight": bulk_order.remaining_weight,
                     "destinations": summary
                 },
                 status=status.HTTP_200_OK)
@@ -697,6 +697,9 @@ class FeedbackView(APIView):
             if not (rating and comments):
                 return Response({"error": "Rating and comments are required."}, status=status.HTTP_400_BAD_REQUEST)
 
+            if order.status != "Delivered":
+                return Response({"error": "Order has to be delivered before you can provide feedback."}, status=status.HTTP_400_BAD_REQUEST)
+
             Feedback.objects.create(customer=request.user.customer, order=order, rating=rating, comments=comments)
 
             return Response({"message": "Feedback submitted successfully."}, status=status.HTTP_200_OK)
@@ -713,7 +716,7 @@ class CancelOrderView(APIView):
         try:
             order = get_object_or_404(Order, id=order_id)
             # Ensure the logged-in user is the customer associated with the order
-            if order.customer != request.user:
+            if order.customer != request.user.customer:
                 return Response(
                     {"error": "You do not have permission to cancel this order."},
                     status=status.HTTP_403_FORBIDDEN,
@@ -731,4 +734,4 @@ class CancelOrderView(APIView):
             return Response({"message": "Order cancelled successfully."}, status=status.HTTP_200_OK)
         except Exception as e:
             logger.error(f"Error cancelling order: {str(e)}")
-            return Response({"error": f"Could not cancel order.:{str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({"error": f"Could not cancel order. Reason: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

@@ -14,6 +14,7 @@ class Order(models.Model):
         ("Arrived", _("Arrived")),
         ("Delivered", _("Delivered")),
         ("Failed", _("Failed")),
+        ("Cancelled", _("Cancelled")),
         ("Created", _("Created")),
         ("RiderSearch", _("RiderSearch")),
 
