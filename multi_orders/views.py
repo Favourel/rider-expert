@@ -555,12 +555,12 @@ class RealTimeOrderTrackingView(APIView):
     def get(self, request, order_id, *args, **kwargs):
         try:
             order = get_object_or_404(Order, id=order_id)
-            riders = order.riders.all()  # Fetch all associated riders
+            riders = order.assignments.all()  # Fetch all associated riders
 
             riders_data = []
             for rider in riders:
                 # Fetch assignment for the current rider and order
-                assignments = OrderRiderAssignment.objects.filter(order=order, rider=rider, customer=request.user)
+                assignments = OrderRiderAssignment.objects.filter(order=order, rider=rider.rider, customer=request.user.customer)
                 for assignment in assignments:
                     # Calculate distance and ETA
                     result = self.get_additional_information(order, rider)
@@ -576,13 +576,13 @@ class RealTimeOrderTrackingView(APIView):
 
                     # Append rider data
                     riders_data.append({
-                        "email": rider.user.email,
-                        "name": rider.user.get_full_name(),
+                        "email": rider.rider.email,
+                        "name": rider.rider.get_full_name(),
                         "assignment_status": assignment.status,
-                        "rider_status": rider.status,
+                        "rider_status": rider.rider.status,
                         "rider_location": {
-                            "lat": rider.current_lat,
-                            "long": rider.current_long
+                            "lat": rider.rider.current_lat,
+                            "long": rider.rider.current_long
                         },
                         "distance_to_destination": f"{distance} km",
                         "eta": f"{duration} minutes",
@@ -594,12 +594,12 @@ class RealTimeOrderTrackingView(APIView):
 
         except Exception as e:
             logger.error(f"Error in tracking order {order_id}: {str(e)}")
-            return Response({"error": "Could not fetch tracking details."},
+            return Response({"error": "Could not fetch tracking details.", "details": f"{str(e)}"},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def get_additional_information(self, order, rider):
         order_location = f"{order.pickup_long},{order.pickup_lat}"
-        conditions = [{"column": "rider_email", "value": rider.user.email}]
+        conditions = [{"column": "rider_email", "value": rider.rider.email}]
         fields = ["rider_email", "current_lat", "current_long"]
 
         rider_data = supabase.get_supabase_riders(
@@ -632,7 +632,7 @@ class BulkOrderSummaryView(APIView):
         """
         try:
             bulk_order = get_object_or_404(Order, id=order_id, is_bulk=True)
-            assignments = OrderRiderAssignment.objects.filter(order=bulk_order, customer=request.user)
+            assignments = OrderRiderAssignment.objects.filter(order=bulk_order, customer=request.user.customer)
 
             summary = [
                 {
@@ -647,7 +647,7 @@ class BulkOrderSummaryView(APIView):
                         'min_capacity': assignment.rider.min_capacity,
                         'max_capacity': assignment.rider.max_capacity
                     },
-                    "rider": assignment.rider.user.get_full_name() if assignment.rider else None
+                    "rider": assignment.rider.user.get_full_name if assignment.rider else None
                 }
                 for assignment in assignments
             ]
@@ -697,7 +697,7 @@ class FeedbackView(APIView):
             if not (rating and comments):
                 return Response({"error": "Rating and comments are required."}, status=status.HTTP_400_BAD_REQUEST)
 
-            Feedback.objects.create(customer=request.user, order=order, rating=rating, comments=comments)
+            Feedback.objects.create(customer=request.user.customer, order=order, rating=rating, comments=comments)
 
             return Response({"message": "Feedback submitted successfully."}, status=status.HTTP_200_OK)
         except Exception as e:
@@ -712,6 +712,13 @@ class CancelOrderView(APIView):
     def post(self, request, order_id, *args, **kwargs):
         try:
             order = get_object_or_404(Order, id=order_id)
+            # Ensure the logged-in user is the customer associated with the order
+            if order.customer != request.user:
+                return Response(
+                    {"error": "You do not have permission to cancel this order."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
             reason = request.data.get("reason")
 
             if not reason:

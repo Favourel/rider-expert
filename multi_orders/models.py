@@ -39,7 +39,7 @@ class OrderRiderAssignment(models.Model):
     )
 
     def __str__(self):
-        return f"Rider {self.rider.user.get_full_name() if self.rider else 'Unassigned'} for Order {self.order.id}"
+        return f"Rider {self.rider.user.get_full_name if self.rider and hasattr(self.rider.user, 'get_full_name') else 'Unassigned'} for Order {self.order.id}"
 
 
 class Feedback(models.Model):
