@@ -292,7 +292,7 @@ class GetAvailableRidersView(APIView):
         if is_bulk:
             if not order.destinations or not isinstance(order.destinations, list):
                 return False, "Missing or invalid destinations for bulk order"
-            if order.weight <= 0:
+            if any(package.package_weight <= 0 for package in order.assignments.all()):
                 return False, "Invalid total weight for bulk order"
 
         return True, ""
@@ -307,118 +307,137 @@ class GetAvailableRidersView(APIView):
         Returns:
         - Response: Contains the status, available riders, or error message.
         """
-        # Get parameters from the request
-        price_offer = request.GET.get("price")
-        order_id = request.GET.get("order_id")
-        order = get_object_or_404(Order, id=int(order_id))  # Fetch the order by ID or return 404 if not found.
-
-        is_bulk = order.is_bulk  # Check if the order is a bulk order.
-
-        # Validate parameters
-        is_valid, validation_message = self.validate_parameters(price_offer, order, is_bulk)
-        if not is_valid:
-            return Response(
-                {"status": "error", "message": validation_message}, status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Extract customer and order details
-        customer = request.user.customer
-        origin_lat = order.pickup_lat
-        origin_long = order.pickup_long
-        is_fragile = order.fragile
-
-        # Format origin coordinates for distance calculations
-        origin = f"{origin_long},{origin_lat}"
-
-        # Fetch rider location data from the Supabase service
-        fields = ["rider_email", "current_lat", "current_long"]
-        riders_location_data = supabase.get_supabase_riders(fields=fields)
-
-        # Filter riders based on item weight, capacity, and fragility
-        fragile_query = {"fragile_item_allowed": True} if is_fragile else {}
-        rider_queryset = Rider.objects.filter(
-            user__email__in=[rider["email"] for rider in riders_location_data],
-            min_capacity__lte=order.total_weight if is_bulk else order.weight,
-            max_capacity__gte=order.total_weight if is_bulk else order.weight,
-            **fragile_query,
-        )
-
-        # Create a mapping of rider emails to Rider objects for efficient lookup
-        rider_email_to_rider = {rider.user.email: rider for rider in rider_queryset}
-
-        # Compile a list of riders with their current locations
-        riders = []
-        for rider in riders_location_data:
-            rider_email = rider["email"]
-            if rider_email in rider_email_to_rider:
-                riders.append({
-                    "email": rider_email,
-                    "location": f"{rider['current_long']},{rider['current_lat']}"
-                })
-
-        # If no riders are found, send a notification to the customer
-        if not riders or not origin:
-            send_customer_notification.delay(
-                customer=customer.user.email, message="No rider found within radius"
-            )
-            return Response(
-                {"status": "error", "message": "No riders found within search radius."},
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-        # Handle single or bulk order logic
-        destinations = (
-            [origin] + [f"{dest['long']},{dest['lat']}" for dest in order.destinations]
-            if is_bulk else [f"{order.recipient_long},{order.recipient_lat}"]
-        )
-
-        # Use the DistanceCalculator to find riders within the search radius
-        calculator = DistanceCalculator(origin)
-        locations_within_radius = calculator.destinations_within_radius(riders, self.SEARCH_RADIUS_KM)
-
-        # If no locations are within the radius, notify the customer
-        if not locations_within_radius:
-            send_customer_notification.delay(
-                customer=customer.user.email, message="No rider around you"
-            )
-            return Response(
-                {"status": "error", "message": "No riders found within search radius."},
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-        # Use Matrix API to calculate distances and durations for riders and destinations
         try:
-            results = self.get_matrix_results(origin, locations_within_radius)
+            # Get parameters from the request
+            price_offer = request.GET.get("price")
+            order_id = request.GET.get("order_id")
+            order = get_object_or_404(Order, id=int(order_id))  # Fetch the order by ID or return 404 if not found.
+
+            is_bulk = order.is_bulk  # Check if the order is a bulk order.
+
+            # Validate parameters
+            is_valid, validation_message = self.validate_parameters(price_offer, order, is_bulk)
+            if not is_valid:
+                return Response(
+                    {"status": "error", "message": validation_message}, status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Extract customer and order details
+            customer = request.user.customer
+            origin_lat = order.pickup_lat
+            origin_long = order.pickup_long
+            is_fragile = order.fragile
+
+            # Format origin coordinates for distance calculations
+            origin = f"{origin_long},{origin_lat}"
+
+            # Fetch rider location data from the Supabase service
+            fields = ["rider_email", "current_lat", "current_long"]
+            riders_location_data = supabase.get_supabase_riders(fields=fields)
+
+            # Filter riders based on item weight, capacity, and fragility
+            fragile_query = {"fragile_item_allowed": True} if is_fragile else {}
+            from django.db.models import Q
+
+            if is_bulk:
+                weights = [package.package_weight for package in order.assignments.all()]
+                rider_queryset = Rider.objects.filter(
+                    user__email__in=[rider["email"] for rider in riders_location_data],
+                    **fragile_query,
+                ).filter(
+                    Q(min_capacity__lte=min(weights), max_capacity__gte=max(weights))
+                )
+            else:
+                rider_queryset = Rider.objects.filter(
+                    user__email__in=[rider["email"] for rider in riders_location_data],
+                    min_capacity__lte=order.weight,
+                    max_capacity__gte=order.weight,
+                    **fragile_query,
+                )
+
+            # Create a mapping of rider emails to Rider objects for efficient lookup
+            rider_email_to_rider = {rider.user.email: rider for rider in rider_queryset}
+
+            # Compile a list of riders with their current locations
+            riders = []
+            for rider in riders_location_data:
+                rider_email = rider["email"]
+                if rider_email in rider_email_to_rider:
+                    riders.append({
+                        "email": rider_email,
+                        "location": f"{rider['current_long']},{rider['current_lat']}"
+                    })
+
+            # If no riders are found, send a notification to the customer
+            if not riders or not origin:
+                send_customer_notification.delay(
+                    customer=customer.user.email, message="No rider found within radius"
+                )
+                return Response(
+                    {"status": "error", "message": "No riders found within search radius."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            # Handle single or bulk order logic
+            destinations = (
+                [origin] + [f"{dest['long']},{dest['lat']}" for dest in order.destinations]
+                if is_bulk else [f"{order.recipient_long},{order.recipient_lat}"]
+            )
+
+            # Use the DistanceCalculator to find riders within the search radius
+            calculator = DistanceCalculator(origin)
+            locations_within_radius = calculator.destinations_within_radius(riders, self.SEARCH_RADIUS_KM)
+
+            # If no locations are within the radius, notify the customer
+            if not locations_within_radius:
+                send_customer_notification.delay(
+                    customer=customer.user.email, message="No rider around you"
+                )
+                return Response(
+                    {"status": "error", "message": "No riders found within search radius."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            # Use Matrix API to calculate distances and durations for riders and destinations
+            try:
+                results = self.get_matrix_results(origin, locations_within_radius)
+            except Exception as e:
+                # Handle API errors gracefully by switching clients and retrying
+                logger.error(f"Error processing API request: {str(e)}")
+                map_clients_manager.switch_client()
+                results = self.get_matrix_results(origin, locations_within_radius)
+
+            # Send notifications to riders with the order details and price offer
+            send_riders_notification.delay(
+                results,
+                price=price_offer,
+                request_coordinates={"long": origin_long, "lat": origin_lat},
+                order_id=order_id,
+            )
+
+            # Update order status to indicate that rider search has started
+            order.status = "RiderSearch"
+            order.save()
+
+            # Serialize the order data to include in the response
+            order_data = OrderDetailUserSerializer(order).data
+
+            # Return a success response
+            return Response(
+                {
+                    **order_data,
+                    "status": "success",
+                    "order_status": order.status,
+                    "message": "Notification sent successfully",
+                }
+            )
+
         except Exception as e:
-            # Handle API errors gracefully by switching clients and retrying
-            logger.error(f"Error processing API request: {str(e)}")
-            map_clients_manager.switch_client()
-            results = self.get_matrix_results(origin, locations_within_radius)
-
-        # Send notifications to riders with the order details and price offer
-        send_riders_notification.delay(
-            results,
-            price=price_offer,
-            request_coordinates={"long": origin_long, "lat": origin_lat},
-            order_id=order_id,
-        )
-
-        # Update order status to indicate that rider search has started
-        order.status = "RiderSearch"
-        order.save()
-
-        # Serialize the order data to include in the response
-        order_data = OrderDetailUserSerializer(order).data
-
-        # Return a success response
-        return Response(
-            {
-                **order_data,
-                "status": "success",
-                "order_status": order.status,
-                "message": "Notification sent successfully",
-            }
-        )
+            logger.error(f"Error in GetAvailableRidersView: {str(e)}")
+            return Response(
+                {"error": "An unexpected error occurred.", "details": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
     def get_matrix_results(self, origin, destinations):
         """

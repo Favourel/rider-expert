@@ -13,7 +13,7 @@ class OrderRiderAssignmentInline(admin.TabularInline):
 
 class OrderAdmin(admin.ModelAdmin):
     list_display = ['customer', 'rider', 'pickup_address', 'is_bulk', 'recipient_name', 'status', 'updated_at']
-    list_filter = ['customer', 'rider', 'status', 'created_at']
+    list_filter = ['is_bulk', 'status', 'created_at']
     search_fields = ['customer', 'rider']
     inlines = [OrderRiderAssignmentInline]
 
