@@ -49,6 +49,7 @@ class AcceptOrDeclineOrderAssignmentView(APIView, MultiRiderOrderErrorHandlingMi
         try:
             # Parse and validate input
             order_id = request.data.get("order_id")
+            price = request.data.get("price")
             accept = request.data.get("accept", False)
             reason = request.data.get("reason", "")
 
@@ -222,7 +223,7 @@ class AcceptOrDeclineOrderAssignmentView(APIView, MultiRiderOrderErrorHandlingMi
         """
         try:
             order = declined_assignment.order
-            declined_weight = declined_assignment.assigned_weight
+            declined_weight = declined_assignment.package_weight
             pickup_location = f"{order.pickup_long},{order.pickup_lat}"
 
             # Find suitable alternative riders

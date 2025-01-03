@@ -470,31 +470,91 @@ class GetOrderDetailByUser(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, email, *args, **kwargs):
-        print(email)
-        user_type = request.GET.get("user_type")
-        order = Order.objects.filter(
-            Q(customer__user__email=email) | Q(rider__user__email=email)
-        )
-        if order:
-            order = order.latest("created_at")
-            extra_data = {}
-            if user_type == "customer":
-                order_location = f"{order.pickup_long},{order.pickup_lat}"
-                recipient_location = f"{order.recipient_long},{order.recipient_lat}"
-                available_riders = get_rider_available(
-                    self.SEARCH_RADIUS_KM, order_location
-                )
-                cost = get_ride_average_cost(
-                    available_riders, order_location, recipient_location
-                )
-                extra_data["cost"] = cost
-
-            serializer = OrderDetailUserSerializer(order)
-            return Response(
-                {**serializer.data, **extra_data}, status=status.HTTP_200_OK
+        try:
+            user_type = request.GET.get("user_type")
+            order = Order.objects.filter(
+                Q(customer__user__email=email) | Q(rider__user__email=email)
             )
-        else:
-            return Response({"message": "Order not found"}, status=status.HTTP_200_OK)
+
+            if order:
+                order = order.latest("created_at")
+                extra_data = {}
+
+                # Handle customer-specific details
+                if user_type == "customer":
+                    if order.is_bulk:
+                        # Bulk order handling
+                        assignments = order.assignments.all()
+                        assignments_data = []
+                        total_cost = 0
+
+                        for assignment in assignments:
+                            order_location = f"{assignment.pickup_long},{assignment.pickup_lat}"
+                            recipient_location = f"{assignment.recipient_long},{assignment.recipient_lat}"
+                            available_riders = get_rider_available(
+                                self.SEARCH_RADIUS_KM, order_location
+                            )
+                            cost = get_ride_average_cost(
+                                available_riders, order_location, recipient_location
+                            )
+                            total_cost += cost
+                            assignments_data.append({
+                                "rider_name": assignment.rider.user.get_full_name() if assignment.rider else "Unassigned",
+                                "status": assignment.status,
+                                "assigned_weight": assignment.package_weight,
+                                # "distance": assignment.distance,
+                                # "duration": assignment.duration,
+                                "cost": cost,
+                                "pickup_location": order_location,
+                                "recipient_location": recipient_location,
+                            })
+
+                        extra_data["assignments"] = assignments_data
+                        extra_data["bulk_order_status"] = self.get_bulk_order_status(assignments)
+                        extra_data["cost"] = total_cost
+
+                    else:
+                        # Single order handling
+                        order_location = f"{order.pickup_long},{order.pickup_lat}"
+                        recipient_location = f"{order.recipient_long},{order.recipient_lat}"
+                        available_riders = get_rider_available(
+                            self.SEARCH_RADIUS_KM, order_location
+                        )
+                        cost = get_ride_average_cost(
+                            available_riders, order_location, recipient_location
+                        )
+                        extra_data["cost"] = cost
+
+                # Serialize order details
+                serializer = OrderDetailUserSerializer(order)
+                return Response(
+                    {**serializer.data, **extra_data}, status=status.HTTP_200_OK
+                )
+
+            return Response({"message": "Order not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        except Exception as e:
+            logger.error(f"Error in GetOrderDetailByUserView: {str(e)}")
+            return Response(
+                {"error": "An unexpected error occurred.", "details": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    def get_bulk_order_status(self, assignments):
+        """
+        Calculate the overall status of a bulk order based on individual assignments.
+
+        Args:
+            assignments (QuerySet): The order assignments for the bulk order.
+
+        Returns:
+            str: The overall status of the bulk order.
+        """
+        if all(assignment.status == "Accepted" for assignment in assignments):
+            return "Fully Assigned"
+        elif any(assignment.status == "Accepted" for assignment in assignments):
+            return "Partially Assigned"
+        return "Pending Assignment"
 
 
 class AcceptOrDeclineOrderView(APIView):

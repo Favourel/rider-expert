@@ -140,4 +140,5 @@ class OrderDetailUserSerializer(serializers.ModelSerializer):
             "order_completion_code",
             "distance",
             "duration",
+            "is_bulk"
         ]
