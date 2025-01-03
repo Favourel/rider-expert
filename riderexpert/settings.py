@@ -70,9 +70,11 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    "corsheaders.middleware.CorsMiddleware",
-    "django.middleware.common.CommonMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
+    'whitenoise.middleware.WhiteNoiseMiddleware',
+    "django.middleware.common.CommonMiddleware",
+
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     'multi_orders.custom_mixins.DisableCSRFMiddleware',
@@ -103,7 +105,6 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "riderexpert.wsgi.application"
-
 
 # Database
 # https://docs.djangoproject.com/en/4.1/ref/settings/#databases
@@ -235,7 +236,6 @@ USE_I18N = True
 
 USE_TZ = True
 
-
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.1/howto/static-files/
 
@@ -253,7 +253,6 @@ STATICFILES_DIRS = [
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -266,7 +265,8 @@ LOGGING = {
         # },
         "console": {
             "class": "logging.StreamHandler",
-            "level": "INFO",  # Set the desired minimum log level for the console handler (INFO includes ERROR and WARNING)
+            "level": "INFO",
+            # Set the desired minimum log level for the console handler (INFO includes ERROR and WARNING)
         },
     },
     "root": {
