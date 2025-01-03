@@ -465,7 +465,7 @@ class OrderDetailView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-class GetOrderDetailByUser_(APIView):
+class GetOrderDetailByUser(APIView):
     SEARCH_RADIUS_KM = 5
     permission_classes = [IsAuthenticated]
 
@@ -531,7 +531,7 @@ class GetOrderDetailByUser_(APIView):
                     {**serializer.data, **extra_data}, status=status.HTTP_200_OK
                 )
 
-            return Response({"message": "Order not found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"message": "Order not found"}, status=status.HTTP_200_OK)
 
         except Exception as e:
             logger.error(f"Error in GetOrderDetailByUserView: {str(e)}")
@@ -555,38 +555,6 @@ class GetOrderDetailByUser_(APIView):
         elif any(assignment.status == "Accepted" for assignment in assignments):
             return "Partially Assigned"
         return "Pending Assignment"
-
-
-class GetOrderDetailByUser(APIView):
-    SEARCH_RADIUS_KM = 5
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request, email, *args, **kwargs):
-        print(email)
-        user_type = request.GET.get("user_type")
-        order = Order.objects.filter(
-            Q(customer__user__email=email) | Q(rider__user__email=email)
-        )
-        if order:
-            order = order.latest("created_at")
-            extra_data = {}
-            if user_type == "customer":
-                order_location = f"{order.pickup_long},{order.pickup_lat}"
-                recipient_location = f"{order.recipient_long},{order.recipient_lat}"
-                available_riders = get_rider_available(
-                    self.SEARCH_RADIUS_KM, order_location
-                )
-                cost = get_ride_average_cost(
-                    available_riders, order_location, recipient_location
-                )
-                extra_data["cost"] = cost
-
-            serializer = OrderDetailUserSerializer(order)
-            return Response(
-                {**serializer.data, **extra_data}, status=status.HTTP_200_OK
-            )
-        else:
-            return Response({"message": "Order not found"}, status=status.HTTP_200_OK)
 
 
 class AcceptOrDeclineOrderView(APIView):
