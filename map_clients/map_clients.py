@@ -243,7 +243,7 @@ def validate_distances(pickup_coords, destinations):
     for destination in destinations:
         try:
             distance_km = get_distance(pickup_coords, f"{destination['long']},{destination['lat']}")
-            if distance_km < MAX_DISTANCE_KM:
+            if distance_km > MAX_DISTANCE_KM:
                 errors.append({
                     "recipient_name": destination["recipient_name"],
                     "recipient_address": destination["recipient_address"],
